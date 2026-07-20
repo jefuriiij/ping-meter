@@ -1,0 +1,286 @@
+using Microsoft.Win32;
+using PingMeter.Config;
+using PingMeter.Ping;
+using PingMeter.Settings;
+using PingMeter.Taskbar;
+using PingMeter.Widget;
+
+namespace PingMeter.App;
+
+internal sealed class TrayContext : ApplicationContext
+{
+    private enum StatusBucket
+    {
+        Unknown,
+        Good,
+        Warn,
+        Bad,
+    }
+
+    private const int SparklinePoints = 24;
+
+    private readonly AppConfig _config;
+    private readonly PingEngine _engine;
+    private readonly NotifyIcon _tray;
+    private readonly TaskbarWatcher _watcher;
+    private readonly ContextMenuStrip _menu = new();
+    private readonly List<TaskbarEmbedder> _embedders = [];
+    private readonly System.Windows.Forms.Timer _taskbarCountTimer;
+    private readonly Dictionary<StatusBucket, Icon> _icons;
+    private StatusBucket _iconBucket = (StatusBucket)(-1);
+    private SettingsForm? _settingsForm;
+    private int _lastTaskbarCount = -1;
+
+    public TrayContext()
+    {
+        _config = ConfigStore.Load();
+        ApplyAutostart(_config.StartWithWindows);
+
+        _engine = new PingEngine(_config.ActiveTarget, _config.IntervalMs, _config.TimeoutMs, _config.StatsWindow);
+        _engine.SampleReceived += PushSnapshot;
+
+        RebuildMenu();
+
+        _icons = new Dictionary<StatusBucket, Icon>
+        {
+            [StatusBucket.Unknown] = MakeCircleIcon(Color.FromArgb(140, 140, 140)),
+            [StatusBucket.Good] = MakeCircleIcon(Color.FromArgb(102, 187, 106)),
+            [StatusBucket.Warn] = MakeCircleIcon(Color.FromArgb(255, 179, 0)),
+            [StatusBucket.Bad] = MakeCircleIcon(Color.FromArgb(239, 83, 80)),
+        };
+        _tray = new NotifyIcon
+        {
+            Icon = _icons[StatusBucket.Unknown],
+            Text = "PingMeter",
+            ContextMenuStrip = _menu,
+            Visible = true,
+        };
+        _tray.DoubleClick += (_, _) => OpenSettings();
+
+        _watcher = new TaskbarWatcher();
+        _watcher.TaskbarsChanged += RebuildEmbedders;
+
+        // Toggling "show taskbar on all displays" fires no system event — poll the count.
+        _taskbarCountTimer = new System.Windows.Forms.Timer { Interval = 2000 };
+        _taskbarCountTimer.Tick += (_, _) =>
+        {
+            if (TaskbarLocator.CountTaskbars() != _lastTaskbarCount)
+                _watcher.Trigger();
+        };
+        _taskbarCountTimer.Start();
+
+        RebuildEmbedders();
+        _engine.Start();
+    }
+
+    private void RebuildMenu()
+    {
+        _menu.Items.Clear();
+        foreach (string target in _config.Targets)
+        {
+            var item = new ToolStripMenuItem(target)
+            {
+                Checked = string.Equals(target, _config.ActiveTarget, StringComparison.OrdinalIgnoreCase),
+            };
+            string captured = target;
+            item.Click += (_, _) => SwitchTarget(captured);
+            _menu.Items.Add(item);
+        }
+        _menu.Items.Add(new ToolStripSeparator());
+
+        var pause = new ToolStripMenuItem("Pause") { Checked = _engine.IsPaused };
+        pause.Click += (_, _) =>
+        {
+            _engine.SetPaused(!_engine.IsPaused);
+            RebuildMenu();
+        };
+        _menu.Items.Add(pause);
+
+        var settings = new ToolStripMenuItem("Settings…");
+        settings.Click += (_, _) => OpenSettings();
+        _menu.Items.Add(settings);
+
+        _menu.Items.Add(new ToolStripSeparator());
+        var exit = new ToolStripMenuItem("Exit");
+        exit.Click += (_, _) => ExitThread();
+        _menu.Items.Add(exit);
+    }
+
+    private void SwitchTarget(string host)
+    {
+        _config.ActiveTarget = host;
+        ConfigStore.Save(_config);
+        _engine.SetTarget(host);
+        RebuildMenu();
+    }
+
+    private void RebuildEmbedders()
+    {
+        foreach (var embedder in _embedders)
+            embedder.Dispose();
+        _embedders.Clear();
+
+        var taskbars = new List<TaskbarInfo>();
+        if (_config.Monitors is MonitorSelection.Primary or MonitorSelection.All)
+        {
+            if (TaskbarLocator.FindPrimary() is { } primary)
+                taskbars.Add(primary);
+        }
+        if (_config.Monitors is MonitorSelection.Secondary or MonitorSelection.All)
+            taskbars.AddRange(TaskbarLocator.FindSecondaries());
+
+        // "Secondary only" with no secondary taskbar present: fall back to primary
+        // so the widget never silently disappears.
+        if (taskbars.Count == 0 && TaskbarLocator.FindPrimary() is { } fallback)
+            taskbars.Add(fallback);
+
+        foreach (var taskbar in taskbars)
+        {
+            var widget = new WidgetForm(_config, _menu);
+            widget.SettingsRequested += OpenSettings;
+            var embedder = new TaskbarEmbedder(taskbar, widget);
+            embedder.TaskbarLost += _watcher.Trigger;
+            _embedders.Add(embedder);
+            embedder.Attach();
+        }
+
+        _lastTaskbarCount = TaskbarLocator.CountTaskbars();
+        PushSnapshot();
+    }
+
+    private void PushSnapshot()
+    {
+        var snapshot = _engine.Stats.GetSnapshot(SparklinePoints);
+        bool paused = _engine.IsPaused;
+        string target = _engine.Target;
+
+        foreach (var embedder in _embedders)
+            embedder.Widget.UpdateSnapshot(snapshot, paused, target);
+
+        string status = paused ? "paused"
+            : snapshot.Current is { } c ? (c.IsLost ? "timeout" : $"{c.RoundtripMs} ms")
+            : "…";
+        string text = $"PingMeter — {target}: {status}";
+        _tray.Text = text.Length <= 120 ? text : text[..120];
+
+        SetTrayIcon(BucketFor(snapshot, paused));
+    }
+
+    private StatusBucket BucketFor(StatsSnapshot snapshot, bool paused)
+    {
+        if (paused || snapshot.Current is not { } current)
+            return StatusBucket.Unknown;
+        if (current.IsLost)
+            return StatusBucket.Bad;
+        long ms = current.RoundtripMs!.Value;
+        return ms < _config.GreenBelowMs ? StatusBucket.Good
+            : ms < _config.YellowBelowMs ? StatusBucket.Warn
+            : StatusBucket.Bad;
+    }
+
+    private void SetTrayIcon(StatusBucket bucket)
+    {
+        if (bucket == _iconBucket)
+            return;
+        _iconBucket = bucket;
+        _tray.Icon = _icons[bucket];
+    }
+
+    private void OpenSettings()
+    {
+        if (_settingsForm is { IsDisposed: false })
+        {
+            _settingsForm.Activate();
+            return;
+        }
+        _settingsForm = new SettingsForm(_config);
+        _settingsForm.ConfigSaved += ApplySettings;
+        _settingsForm.Show();
+    }
+
+    private void ApplySettings(AppConfig updated)
+    {
+        updated.Normalize();
+        bool monitorsChanged = updated.Monitors != _config.Monitors;
+        bool statsChanged = updated.StatsWindow != _config.StatsWindow;
+        bool targetChanged = !string.Equals(updated.ActiveTarget, _config.ActiveTarget, StringComparison.OrdinalIgnoreCase);
+
+        _config.CopyFrom(updated);
+        ConfigStore.Save(_config);
+
+        _engine.IntervalMs = _config.IntervalMs;
+        _engine.TimeoutMs = _config.TimeoutMs;
+        if (statsChanged)
+            _engine.Stats.Resize(_config.StatsWindow);
+        if (targetChanged)
+            _engine.SetTarget(_config.ActiveTarget);
+        ApplyAutostart(_config.StartWithWindows);
+        RebuildMenu();
+
+        if (monitorsChanged)
+        {
+            RebuildEmbedders();
+        }
+        else
+        {
+            foreach (var embedder in _embedders)
+                embedder.Widget.RefreshConfig();
+        }
+        PushSnapshot();
+    }
+
+    private static void ApplyAutostart(bool enable)
+    {
+        try
+        {
+            using var key = Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run");
+            if (enable && Environment.ProcessPath is { } exe)
+                key.SetValue("PingMeter", $"\"{exe}\"");
+            else
+                key.DeleteValue("PingMeter", throwOnMissingValue: false);
+        }
+        catch
+        {
+            // autostart is best-effort
+        }
+    }
+
+    private static Icon MakeCircleIcon(Color color)
+    {
+        using var bitmap = new Bitmap(16, 16);
+        using (var g = Graphics.FromImage(bitmap))
+        {
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            using var brush = new SolidBrush(color);
+            g.FillEllipse(brush, 2, 2, 12, 12);
+        }
+        IntPtr hIcon = bitmap.GetHicon();
+        try
+        {
+            using var temp = Icon.FromHandle(hIcon);
+            return (Icon)temp.Clone(); // clone owns its own handle
+        }
+        finally
+        {
+            NativeMethods.DestroyIcon(hIcon);
+        }
+    }
+
+    protected override void ExitThreadCore()
+    {
+        _taskbarCountTimer.Stop();
+        _taskbarCountTimer.Dispose();
+        _tray.Visible = false;
+        _engine.Dispose();
+        foreach (var embedder in _embedders)
+            embedder.Dispose();
+        _embedders.Clear();
+        _watcher.Dispose();
+        _settingsForm?.Dispose();
+        _tray.Dispose();
+        _menu.Dispose();
+        foreach (var icon in _icons.Values)
+            icon.Dispose();
+        base.ExitThreadCore();
+    }
+}
