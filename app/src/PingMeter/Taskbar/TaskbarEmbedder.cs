@@ -1,3 +1,4 @@
+using PingMeter.Config;
 using PingMeter.Widget;
 
 namespace PingMeter.Taskbar;
@@ -14,10 +15,12 @@ internal sealed class TaskbarEmbedder : IDisposable
     private const int FallbackRetryTicks = 40; // retry a failed embed every ~10 s
 
     private readonly TaskbarInfo _taskbar;
+    private readonly AppConfig _config;
     private readonly System.Windows.Forms.Timer _timer;
     private bool _embedded;
     private int _ticksSinceEmbedAttempt;
     private NativeMethods.RECT _lastTaskbarRect, _lastNotifyRect, _lastStartRect;
+    private int _lastForeignLeft = int.MaxValue;
     private uint _dpi = 96;
     private bool _disposed;
 
@@ -26,10 +29,11 @@ internal sealed class TaskbarEmbedder : IDisposable
     /// <summary>The taskbar HWND died (explorer crashed) — owner should rebuild everything.</summary>
     public event Action? TaskbarLost;
 
-    public TaskbarEmbedder(TaskbarInfo taskbar, WidgetForm widget)
+    public TaskbarEmbedder(TaskbarInfo taskbar, WidgetForm widget, AppConfig config)
     {
         _taskbar = taskbar;
         Widget = widget;
+        _config = config;
         _timer = new System.Windows.Forms.Timer { Interval = RepositionIntervalMs };
         _timer.Tick += (_, _) => Tick();
     }
@@ -104,16 +108,20 @@ internal sealed class TaskbarEmbedder : IDisposable
         if (_taskbar.Start != IntPtr.Zero)
             NativeMethods.GetWindowRect(_taskbar.Start, out rcStart);
 
+        int foreignLeft = FindLeftmostInjectedWidgetX(rcTaskbar);
+
         if (!force &&
             rcTaskbar.SameAs(_lastTaskbarRect) &&
             rcNotify.SameAs(_lastNotifyRect) &&
-            rcStart.SameAs(_lastStartRect))
+            rcStart.SameAs(_lastStartRect) &&
+            foreignLeft == _lastForeignLeft)
         {
             return;
         }
         _lastTaskbarRect = rcTaskbar;
         _lastNotifyRect = rcNotify;
         _lastStartRect = rcStart;
+        _lastForeignLeft = foreignLeft;
 
         int barHeight = rcTaskbar.Height;
         // On Win11 22H2+ touch devices Shell_TrayWnd is taller than the visible bar; the
@@ -127,7 +135,10 @@ internal sealed class TaskbarEmbedder : IDisposable
         int notifyX = rcNotify.Width > 0
             ? rcNotify.Left - rcTaskbar.Left
             : rcTaskbar.Width - Dpi(88);
-        int x = notifyX - size.Width - Dpi(4);
+        // Other taskbar-injected widgets (e.g. TrafficMonitor) claim the same spot —
+        // anchor left of the leftmost one instead of stacking on top of it.
+        int anchorX = Math.Min(notifyX, foreignLeft);
+        int x = anchorX - size.Width - Dpi(4) - Dpi(_config.HorizontalOffsetPx);
         int y = (visibleHeight - size.Height) / 2 + (barHeight - visibleHeight);
 
         if (_embedded)
@@ -141,6 +152,38 @@ internal sealed class TaskbarEmbedder : IDisposable
                 NativeMethods.SWP_NOACTIVATE);
         }
         Widget.LayoutDirty = false;
+    }
+
+    /// <summary>
+    /// Leftmost X (taskbar-relative) of any other injected widget in the taskbar's right
+    /// region, or int.MaxValue when there is none. Injected widgets (TrafficMonitor, etc.)
+    /// are popup-style windows reparented into the taskbar — genuine shell elements have
+    /// WS_CHILD, so the style bit cleanly separates the two.
+    /// </summary>
+    private int FindLeftmostInjectedWidgetX(NativeMethods.RECT rcTaskbar)
+    {
+        int best = int.MaxValue;
+        NativeMethods.EnumChildWindows(_taskbar.Handle, (hwnd, _) =>
+        {
+            if (hwnd == Widget.Handle)
+                return true;
+            if (NativeMethods.GetAncestor(hwnd, NativeMethods.GA_PARENT) != _taskbar.Handle)
+                return true; // only direct children; skips the XAML subtree
+            if (!NativeMethods.IsWindowVisible(hwnd))
+                return true;
+            long style = NativeMethods.GetWindowLongPtr(hwnd, NativeMethods.GWL_STYLE).ToInt64();
+            if ((style & NativeMethods.WS_CHILD) != 0)
+                return true; // genuine shell element
+            if (!NativeMethods.GetWindowRect(hwnd, out var rc))
+                return true;
+            int left = rc.Left - rcTaskbar.Left;
+            // Sanity: only widget-sized windows parked in the right half count.
+            if (left <= rcTaskbar.Width / 2 || rc.Width <= 0 || rc.Width > rcTaskbar.Width / 2)
+                return true;
+            best = Math.Min(best, left);
+            return true;
+        }, IntPtr.Zero);
+        return best;
     }
 
     private int Dpi(int px) => (int)Math.Round(px * _dpi / 96.0);

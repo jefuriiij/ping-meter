@@ -297,7 +297,7 @@ internal sealed class TrayContext : ApplicationContext
         {
             var widget = new WidgetForm(_config, _menu);
             widget.SettingsRequested += OpenSettings;
-            var embedder = new TaskbarEmbedder(taskbar, widget);
+            var embedder = new TaskbarEmbedder(taskbar, widget, _config);
             embedder.TaskbarLost += _watcher.Trigger;
             _embedders.Add(embedder);
             embedder.Attach();

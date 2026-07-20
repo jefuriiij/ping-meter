@@ -16,6 +16,10 @@ public sealed class AppConfig
     public int GreenBelowMs { get; set; } = 50;
     public int YellowBelowMs { get; set; } = 120;
     public MonitorSelection Monitors { get; set; } = MonitorSelection.All;
+
+    /// <summary>Extra manual left-shift (DIP) — fallback when auto-avoidance of other taskbar widgets isn't enough.</summary>
+    public int HorizontalOffsetPx { get; set; }
+
     public bool ShowSparkline { get; set; } = true;
     public bool TransparentBackground { get; set; }
     public int StatsWindow { get; set; } = 60;
@@ -47,6 +51,7 @@ public sealed class AppConfig
         YellowBelowMs = Math.Clamp(YellowBelowMs, GreenBelowMs, 10_000);
         StatsWindow = Math.Clamp(StatsWindow, 10, 600);
         LogRetentionDays = Math.Clamp(LogRetentionDays, 1, 365);
+        HorizontalOffsetPx = Math.Clamp(HorizontalOffsetPx, 0, 1000);
     }
 
     public AppConfig Clone()
@@ -65,6 +70,7 @@ public sealed class AppConfig
         GreenBelowMs = other.GreenBelowMs;
         YellowBelowMs = other.YellowBelowMs;
         Monitors = other.Monitors;
+        HorizontalOffsetPx = other.HorizontalOffsetPx;
         ShowSparkline = other.ShowSparkline;
         TransparentBackground = other.TransparentBackground;
         StatsWindow = other.StatsWindow;
