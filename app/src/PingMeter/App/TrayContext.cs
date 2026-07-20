@@ -150,6 +150,16 @@ internal sealed class TrayContext : ApplicationContext
         };
         _menu.Items.Add(pause);
 
+        var reset = new ToolStripMenuItem("Reset");
+        reset.Click += (_, _) =>
+        {
+            _engine.Reset();
+            _tracker.Reset();
+            _eventLog.Info("ping reset");
+            RebuildMenu(); // Reset also resumes, so the Pause checkmark may need clearing
+        };
+        _menu.Items.Add(reset);
+
         _menu.Items.Add(new ToolStripSeparator());
 
         var viewLog = new ToolStripMenuItem("View log");

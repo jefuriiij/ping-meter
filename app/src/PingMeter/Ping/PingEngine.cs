@@ -62,6 +62,15 @@ public sealed class PingEngine : IDisposable
         RaiseSample();
     }
 
+    /// <summary>Discard the in-flight ping and all stats, then keep pinging fresh — like re-running `ping -t`.</summary>
+    public void Reset()
+    {
+        Interlocked.Increment(ref _generation);
+        Stats.Clear();
+        IsPaused = false;
+        RaiseSample();
+    }
+
     private async Task LoopAsync(CancellationToken ct)
     {
         var stopwatch = new Stopwatch();
