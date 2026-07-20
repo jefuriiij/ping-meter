@@ -17,6 +17,7 @@ internal sealed class SettingsForm : Form
     private readonly CheckBox _sparkline = new() { Text = "Show sparkline graph", AutoSize = true };
     private readonly CheckBox _transparent = new() { Text = "Transparent background (text only)", AutoSize = true };
     private readonly ComboBox _monitors = new() { DropDownStyle = ComboBoxStyle.DropDownList, Dock = DockStyle.Fill };
+    private readonly NumericUpDown _offset = MakeNumeric(0, 1000, 4);
     private readonly CheckBox _autostart = new() { Text = "Start with Windows", AutoSize = true };
     private readonly CheckBox _autoUpdate = new() { Text = "Check for updates automatically (daily)", AutoSize = true };
     private readonly CheckBox _eventLog = new() { Text = "Log network events (timeouts, spikes)", AutoSize = true };
@@ -36,7 +37,7 @@ internal sealed class SettingsForm : Form
         StartPosition = FormStartPosition.CenterScreen;
         AutoScaleMode = AutoScaleMode.Dpi;
         AutoScaleDimensions = new SizeF(96F, 96F);
-        ClientSize = new Size(400, 780);
+        ClientSize = new Size(400, 808);
 
         _monitors.Items.AddRange(["Primary taskbar only", "Secondary taskbar(s) only", "All taskbars"]);
 
@@ -57,7 +58,7 @@ internal sealed class SettingsForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 196));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 122));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 152));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 96));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 124));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 140));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
@@ -139,12 +140,13 @@ internal sealed class SettingsForm : Form
     private GroupBox BuildPlacementGroup()
     {
         var group = MakeGroup("Placement");
-        var grid = MakeLabeledRows(("Show on", _monitors));
+        var grid = MakeLabeledRows(
+            ("Show on", _monitors),
+            ("Shift left (px)", _offset));
         grid.RowCount += 1;
-        grid.Controls.Add(_autostart, 0, 1);
+        grid.Controls.Add(_autostart, 0, 2);
         grid.SetColumnSpan(_autostart, 2);
         group.Controls.Add(grid);
-        group.Height = 92;
         return group;
     }
 
@@ -240,6 +242,7 @@ internal sealed class SettingsForm : Form
         _sparkline.Checked = config.ShowSparkline;
         _transparent.Checked = config.TransparentBackground;
         _monitors.SelectedIndex = (int)config.Monitors;
+        _offset.Value = config.HorizontalOffsetPx;
         _autostart.Checked = config.StartWithWindows;
         _autoUpdate.Checked = config.AutoCheckUpdates;
         _eventLog.Checked = config.EventLogEnabled;
@@ -259,6 +262,7 @@ internal sealed class SettingsForm : Form
         config.ShowSparkline = _sparkline.Checked;
         config.TransparentBackground = _transparent.Checked;
         config.Monitors = (MonitorSelection)_monitors.SelectedIndex;
+        config.HorizontalOffsetPx = (int)_offset.Value;
         config.StartWithWindows = _autostart.Checked;
         config.AutoCheckUpdates = _autoUpdate.Checked;
         config.EventLogEnabled = _eventLog.Checked;

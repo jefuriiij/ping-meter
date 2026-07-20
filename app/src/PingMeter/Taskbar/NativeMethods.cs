@@ -12,6 +12,9 @@ internal static class NativeMethods
     public const uint LWA_COLORKEY = 0x00000001;
     public const uint GA_PARENT = 1;
 
+    public const int GWL_STYLE = -16;
+    public const long WS_CHILD = 0x40000000L;
+
     public const uint SWP_NOSIZE = 0x0001;
     public const uint SWP_NOMOVE = 0x0002;
     public const uint SWP_NOACTIVATE = 0x0010;
@@ -59,6 +62,18 @@ internal static class NativeMethods
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool IsWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool IsWindowVisible(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool EnumChildWindows(IntPtr hWndParent, EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+    // x64-only entry point; the app never runs as a 32-bit process (win-x64 publish, x64 OS).
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
+    public static extern IntPtr GetWindowLongPtr(IntPtr hWnd, int nIndex);
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
