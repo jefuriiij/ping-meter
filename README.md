@@ -13,7 +13,17 @@ A tiny Windows 11 utility that embeds a live ping readout **inside the taskbar**
 - **Check for updates** — manually from the menu, plus an automatic daily check (toggleable) that notifies you when a new release is out.
 - Survives Explorer crashes/restarts (re-embeds automatically), tracks DPI per monitor, needs **no admin rights**.
 
-## Run
+## Install
+
+Via winget *(pending package approval)*:
+
+```powershell
+winget install jefuriiij.PingMeter
+```
+
+Or download `PingMeter.exe` from the [latest release](https://github.com/jefuriiij/ping-meter/releases/latest) (see the SmartScreen note below).
+
+## Run from source
 
 ```powershell
 cd app
