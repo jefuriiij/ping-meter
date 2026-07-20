@@ -20,6 +20,14 @@ public sealed class AppConfig
     public bool TransparentBackground { get; set; }
     public int StatsWindow { get; set; } = 60;
     public bool StartWithWindows { get; set; }
+    public bool AutoCheckUpdates { get; set; } = true;
+    public bool EventLogEnabled { get; set; } = true;
+    public bool SampleCsvEnabled { get; set; }
+    public int LogRetentionDays { get; set; } = 30;
+
+    // App state, not user settings — carried in the same file for simplicity.
+    public DateTime LastUpdateCheckUtc { get; set; }
+    public string? LastNotifiedVersion { get; set; }
 
     public void Normalize()
     {
@@ -38,6 +46,7 @@ public sealed class AppConfig
         GreenBelowMs = Math.Clamp(GreenBelowMs, 1, 5_000);
         YellowBelowMs = Math.Clamp(YellowBelowMs, GreenBelowMs, 10_000);
         StatsWindow = Math.Clamp(StatsWindow, 10, 600);
+        LogRetentionDays = Math.Clamp(LogRetentionDays, 1, 365);
     }
 
     public AppConfig Clone()
@@ -60,5 +69,11 @@ public sealed class AppConfig
         TransparentBackground = other.TransparentBackground;
         StatsWindow = other.StatsWindow;
         StartWithWindows = other.StartWithWindows;
+        AutoCheckUpdates = other.AutoCheckUpdates;
+        EventLogEnabled = other.EventLogEnabled;
+        SampleCsvEnabled = other.SampleCsvEnabled;
+        LogRetentionDays = other.LogRetentionDays;
+        LastUpdateCheckUtc = other.LastUpdateCheckUtc;
+        LastNotifiedVersion = other.LastNotifiedVersion;
     }
 }

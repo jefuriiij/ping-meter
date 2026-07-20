@@ -1,8 +1,11 @@
+using System.Diagnostics;
 using Microsoft.Win32;
 using PingMeter.Config;
+using PingMeter.Logging;
 using PingMeter.Ping;
 using PingMeter.Settings;
 using PingMeter.Taskbar;
+using PingMeter.Update;
 using PingMeter.Widget;
 
 namespace PingMeter.App;
@@ -27,17 +30,29 @@ internal sealed class TrayContext : ApplicationContext
     private readonly List<TaskbarEmbedder> _embedders = [];
     private readonly System.Windows.Forms.Timer _taskbarCountTimer;
     private readonly Dictionary<StatusBucket, Icon> _icons;
+    private readonly EventLogger _eventLog = new();
+    private readonly SampleCsvLogger _csvLog = new();
+    private readonly StabilityTracker _tracker;
+    private readonly System.Windows.Forms.Timer _updateTimer;
     private StatusBucket _iconBucket = (StatusBucket)(-1);
     private SettingsForm? _settingsForm;
     private int _lastTaskbarCount = -1;
+    private string? _pendingUpdateUrl;
+    private DateTime _lastSweepDate = DateTime.Now.Date;
 
     public TrayContext()
     {
         _config = ConfigStore.Load();
         ApplyAutostart(_config.StartWithWindows);
 
+        _eventLog.Enabled = _config.EventLogEnabled;
+        _csvLog.Enabled = _config.SampleCsvEnabled;
+        EventLogger.SweepOldLogs(_config.LogRetentionDays);
+        _tracker = new StabilityTracker(_eventLog, _config);
+
         _engine = new PingEngine(_config.ActiveTarget, _config.IntervalMs, _config.TimeoutMs, _config.StatsWindow);
         _engine.SampleReceived += PushSnapshot;
+        _engine.SampleAdded += OnSampleAdded;
 
         RebuildMenu();
 
@@ -56,6 +71,11 @@ internal sealed class TrayContext : ApplicationContext
             Visible = true,
         };
         _tray.DoubleClick += (_, _) => OpenSettings();
+        _tray.BalloonTipClicked += (_, _) =>
+        {
+            if (_pendingUpdateUrl is { } url)
+                OpenUrl(url);
+        };
 
         _watcher = new TaskbarWatcher();
         _watcher.TaskbarsChanged += RebuildEmbedders;
@@ -69,8 +89,41 @@ internal sealed class TrayContext : ApplicationContext
         };
         _taskbarCountTimer.Start();
 
+        // Hourly: daily log sweep + (at most daily) update check. The 30 s one-shot gives
+        // the first auto-check a chance shortly after startup without delaying launch.
+        _updateTimer = new System.Windows.Forms.Timer { Interval = 60 * 60 * 1000 };
+        _updateTimer.Tick += (_, _) =>
+        {
+            SweepLogsIfNewDay();
+            _ = AutoCheckForUpdatesAsync();
+        };
+        _updateTimer.Start();
+        var startupCheck = new System.Windows.Forms.Timer { Interval = 30_000 };
+        startupCheck.Tick += (_, _) =>
+        {
+            startupCheck.Stop();
+            startupCheck.Dispose();
+            _ = AutoCheckForUpdatesAsync();
+        };
+        startupCheck.Start();
+
         RebuildEmbedders();
         _engine.Start();
+        _eventLog.Info($"PingMeter v{UpdateChecker.CurrentVersion} started (target {_config.ActiveTarget}, interval {_config.IntervalMs} ms)");
+    }
+
+    private void OnSampleAdded(PingSample sample)
+    {
+        _tracker.Process(_engine.Target, sample);
+        _csvLog.Log(_engine.Target, sample);
+    }
+
+    private void SweepLogsIfNewDay()
+    {
+        if (DateTime.Now.Date == _lastSweepDate)
+            return;
+        _lastSweepDate = DateTime.Now.Date;
+        EventLogger.SweepOldLogs(_config.LogRetentionDays);
     }
 
     private void RebuildMenu()
@@ -92,9 +145,24 @@ internal sealed class TrayContext : ApplicationContext
         pause.Click += (_, _) =>
         {
             _engine.SetPaused(!_engine.IsPaused);
+            _eventLog.Info(_engine.IsPaused ? "paused" : "resumed");
             RebuildMenu();
         };
         _menu.Items.Add(pause);
+
+        _menu.Items.Add(new ToolStripSeparator());
+
+        var viewLog = new ToolStripMenuItem("View log");
+        viewLog.Click += (_, _) => OpenTodayLog();
+        _menu.Items.Add(viewLog);
+
+        var openLogs = new ToolStripMenuItem("Open logs folder");
+        openLogs.Click += (_, _) => OpenLogsFolder();
+        _menu.Items.Add(openLogs);
+
+        var checkUpdates = new ToolStripMenuItem("Check for updates…");
+        checkUpdates.Click += async (_, _) => await CheckForUpdatesManualAsync();
+        _menu.Items.Add(checkUpdates);
 
         var settings = new ToolStripMenuItem("Settings…");
         settings.Click += (_, _) => OpenSettings();
@@ -111,7 +179,98 @@ internal sealed class TrayContext : ApplicationContext
         _config.ActiveTarget = host;
         ConfigStore.Save(_config);
         _engine.SetTarget(host);
+        _tracker.Reset();
+        _eventLog.Info($"target switched to {host}");
         RebuildMenu();
+    }
+
+    private static void OpenUrl(string url)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+        }
+        catch
+        {
+            // browser launch is best-effort
+        }
+    }
+
+    private static void OpenTodayLog()
+    {
+        try
+        {
+            Directory.CreateDirectory(EventLogger.LogsDir);
+            string file = EventLogger.TodayEventFile;
+            if (!File.Exists(file))
+                File.WriteAllText(file, string.Empty);
+            Process.Start(new ProcessStartInfo(file) { UseShellExecute = true });
+        }
+        catch
+        {
+        }
+    }
+
+    private static void OpenLogsFolder()
+    {
+        try
+        {
+            Directory.CreateDirectory(EventLogger.LogsDir);
+            Process.Start(new ProcessStartInfo(EventLogger.LogsDir) { UseShellExecute = true });
+        }
+        catch
+        {
+        }
+    }
+
+    private async Task AutoCheckForUpdatesAsync()
+    {
+        if (!_config.AutoCheckUpdates)
+            return;
+        if (DateTime.UtcNow - _config.LastUpdateCheckUtc < TimeSpan.FromHours(24))
+            return;
+
+        var result = await UpdateChecker.CheckAsync(); // resumes on the UI thread
+        _config.LastUpdateCheckUtc = DateTime.UtcNow;
+
+        if (result is UpdateResult.UpdateAvailable update &&
+            _config.LastNotifiedVersion != update.Latest.ToString())
+        {
+            _config.LastNotifiedVersion = update.Latest.ToString();
+            _pendingUpdateUrl = update.Url;
+            _eventLog.Info($"update available: v{update.Latest} (running v{UpdateChecker.CurrentVersion})");
+            _tray.ShowBalloonTip(10_000, "PingMeter update available",
+                $"Version {update.Latest} is available (you have {UpdateChecker.CurrentVersion}). Click to download.",
+                ToolTipIcon.Info);
+        }
+        ConfigStore.Save(_config);
+    }
+
+    private async Task CheckForUpdatesManualAsync()
+    {
+        var result = await UpdateChecker.CheckAsync();
+        _config.LastUpdateCheckUtc = DateTime.UtcNow;
+        ConfigStore.Save(_config);
+
+        switch (result)
+        {
+            case UpdateResult.UpToDate upToDate:
+                MessageBox.Show($"You're on the latest version (v{upToDate.Current}).",
+                    "PingMeter", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                break;
+            case UpdateResult.UpdateAvailable update:
+                if (MessageBox.Show(
+                        $"Version {update.Latest} is available (you have {UpdateChecker.CurrentVersion}).\n\nOpen the download page?",
+                        "PingMeter", MessageBoxButtons.YesNo, MessageBoxIcon.Information) == DialogResult.Yes)
+                {
+                    OpenUrl(update.Url);
+                }
+                break;
+            case UpdateResult.Failed failed:
+                MessageBox.Show($"Couldn't check for updates:\n{failed.Reason}",
+                    "PingMeter", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                break;
+        }
     }
 
     private void RebuildEmbedders()
@@ -205,8 +364,17 @@ internal sealed class TrayContext : ApplicationContext
         bool statsChanged = updated.StatsWindow != _config.StatsWindow;
         bool targetChanged = !string.Equals(updated.ActiveTarget, _config.ActiveTarget, StringComparison.OrdinalIgnoreCase);
 
+        // The dialog edited a clone from when it opened — don't let it roll back
+        // update-check state written by the background checker since then.
+        updated.LastUpdateCheckUtc = _config.LastUpdateCheckUtc;
+        updated.LastNotifiedVersion = _config.LastNotifiedVersion;
+
         _config.CopyFrom(updated);
         ConfigStore.Save(_config);
+
+        _eventLog.Enabled = _config.EventLogEnabled;
+        _csvLog.Enabled = _config.SampleCsvEnabled;
+        _eventLog.Info("settings updated");
 
         _engine.IntervalMs = _config.IntervalMs;
         _engine.TimeoutMs = _config.TimeoutMs;
@@ -268,6 +436,9 @@ internal sealed class TrayContext : ApplicationContext
 
     protected override void ExitThreadCore()
     {
+        _eventLog.Info("PingMeter exiting");
+        _updateTimer.Stop();
+        _updateTimer.Dispose();
         _taskbarCountTimer.Stop();
         _taskbarCountTimer.Dispose();
         _tray.Visible = false;

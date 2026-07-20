@@ -24,6 +24,12 @@ public sealed class PingEngine : IDisposable
     /// <summary>Raised on the UI thread after each sample lands in <see cref="Stats"/>.</summary>
     public event Action? SampleReceived;
 
+    /// <summary>
+    /// Raised on the UI thread only for real ping results (never for the refresh-only
+    /// signals SetTarget/SetPaused emit) — this is the event logging must hang off.
+    /// </summary>
+    public event Action<PingSample>? SampleAdded;
+
     public PingEngine(string target, int intervalMs, int timeoutMs, int statsWindow)
     {
         _target = target;
@@ -94,7 +100,7 @@ public sealed class PingEngine : IDisposable
                 if (Volatile.Read(ref _generation) == generation && !ct.IsCancellationRequested)
                 {
                     Stats.Add(sample);
-                    RaiseSample();
+                    RaiseSample(sample);
                 }
             }
 
@@ -111,13 +117,20 @@ public sealed class PingEngine : IDisposable
         }
     }
 
-    private void RaiseSample()
+    private void RaiseSample(PingSample? added = null)
     {
         var ctx = _syncContext;
         if (ctx != null)
-            ctx.Post(_ => SampleReceived?.Invoke(), null);
+            ctx.Post(_ => Raise(added), null);
         else
+            Raise(added);
+
+        void Raise(PingSample? sample)
+        {
+            if (sample is { } s)
+                SampleAdded?.Invoke(s);
             SampleReceived?.Invoke();
+        }
     }
 
     public void Dispose()

@@ -1,4 +1,5 @@
 using PingMeter.Config;
+using PingMeter.Update;
 
 namespace PingMeter.Settings;
 
@@ -17,6 +18,10 @@ internal sealed class SettingsForm : Form
     private readonly CheckBox _transparent = new() { Text = "Transparent background (text only)", AutoSize = true };
     private readonly ComboBox _monitors = new() { DropDownStyle = ComboBoxStyle.DropDownList, Dock = DockStyle.Fill };
     private readonly CheckBox _autostart = new() { Text = "Start with Windows", AutoSize = true };
+    private readonly CheckBox _autoUpdate = new() { Text = "Check for updates automatically (daily)", AutoSize = true };
+    private readonly CheckBox _eventLog = new() { Text = "Log network events (timeouts, spikes)", AutoSize = true };
+    private readonly CheckBox _csvLog = new() { Text = "Also log every ping to CSV (~3.5 MB/day)", AutoSize = true };
+    private readonly NumericUpDown _retention = MakeNumeric(1, 365, 5);
 
     public event Action<AppConfig>? ConfigSaved;
 
@@ -24,14 +29,14 @@ internal sealed class SettingsForm : Form
     {
         _working = current.Clone();
 
-        Text = "PingMeter Settings";
+        Text = $"PingMeter Settings — v{UpdateChecker.CurrentVersion}";
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
         AutoScaleMode = AutoScaleMode.Dpi;
         AutoScaleDimensions = new SizeF(96F, 96F);
-        ClientSize = new Size(400, 640);
+        ClientSize = new Size(400, 780);
 
         _monitors.Items.AddRange(["Primary taskbar only", "Secondary taskbar(s) only", "All taskbars"]);
 
@@ -45,7 +50,7 @@ internal sealed class SettingsForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 5,
+            RowCount = 6,
             Padding = new Padding(12),
         };
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -53,13 +58,15 @@ internal sealed class SettingsForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 122));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 152));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 96));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 140));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
         root.Controls.Add(BuildTargetsGroup(), 0, 0);
         root.Controls.Add(BuildPingGroup(), 0, 1);
         root.Controls.Add(BuildDisplayGroup(), 0, 2);
         root.Controls.Add(BuildPlacementGroup(), 0, 3);
-        root.Controls.Add(BuildButtons(), 0, 4);
+        root.Controls.Add(BuildUpdatesLoggingGroup(), 0, 4);
+        root.Controls.Add(BuildButtons(), 0, 5);
         Controls.Add(root);
     }
 
@@ -141,6 +148,38 @@ internal sealed class SettingsForm : Form
         return group;
     }
 
+    private GroupBox BuildUpdatesLoggingGroup()
+    {
+        var group = MakeGroup("Updates && logging");
+        var grid = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 4,
+            Padding = new Padding(8),
+        };
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 55));
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 45));
+
+        grid.Controls.Add(_autoUpdate, 0, 0);
+        grid.SetColumnSpan(_autoUpdate, 2);
+        grid.Controls.Add(_eventLog, 0, 1);
+        grid.SetColumnSpan(_eventLog, 2);
+        grid.Controls.Add(_csvLog, 0, 2);
+        grid.SetColumnSpan(_csvLog, 2);
+        grid.Controls.Add(new Label
+        {
+            Text = "Keep logs (days)",
+            AutoSize = true,
+            Anchor = AnchorStyles.Left,
+            TextAlign = ContentAlignment.MiddleLeft,
+        }, 0, 3);
+        grid.Controls.Add(_retention, 1, 3);
+
+        group.Controls.Add(grid);
+        return group;
+    }
+
     private Control BuildButtons()
     {
         var panel = new FlowLayoutPanel
@@ -202,6 +241,10 @@ internal sealed class SettingsForm : Form
         _transparent.Checked = config.TransparentBackground;
         _monitors.SelectedIndex = (int)config.Monitors;
         _autostart.Checked = config.StartWithWindows;
+        _autoUpdate.Checked = config.AutoCheckUpdates;
+        _eventLog.Checked = config.EventLogEnabled;
+        _csvLog.Checked = config.SampleCsvEnabled;
+        _retention.Value = config.LogRetentionDays;
     }
 
     private void Save()
@@ -217,6 +260,10 @@ internal sealed class SettingsForm : Form
         config.TransparentBackground = _transparent.Checked;
         config.Monitors = (MonitorSelection)_monitors.SelectedIndex;
         config.StartWithWindows = _autostart.Checked;
+        config.AutoCheckUpdates = _autoUpdate.Checked;
+        config.EventLogEnabled = _eventLog.Checked;
+        config.SampleCsvEnabled = _csvLog.Checked;
+        config.LogRetentionDays = (int)_retention.Value;
         config.Normalize();
         _working.CopyFrom(config);
         LoadFrom(_working); // reflect normalization back into the UI
