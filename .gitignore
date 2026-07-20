@@ -9,3 +9,8 @@
 
 # Publish output
 publish/
+
+# added by synthra (heavy generated state — gitignored by design)
+.synthra-graph/
+# added by synthra — MCP registration. Remove this line if you want to share the synthra MCP entry with teammates via committed .mcp.json
+.mcp.json
