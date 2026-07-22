@@ -162,7 +162,7 @@ internal sealed class TrayContext : ApplicationContext
 
         _menu.Items.Add(new ToolStripSeparator());
 
-        var viewLog = new ToolStripMenuItem("View log");
+        var viewLog = new ToolStripMenuItem("View connection log");
         viewLog.Click += (_, _) => OpenTodayLog();
         _menu.Items.Add(viewLog);
 
