@@ -24,6 +24,9 @@ internal sealed class WidgetForm : Form
 
     private readonly AppConfig _config;
     private readonly ToolTip _toolTip = new();
+    private readonly System.Windows.Forms.Timer _hoverTimer = new() { Interval = 250 };
+    private DateTime _hoverSince;
+    private bool _tooltipShown;
     private StatsSnapshot? _snapshot;
     private bool _paused;
     private uint _dpi = 96;
@@ -47,7 +50,37 @@ internal sealed class WidgetForm : Form
         ContextMenuStrip = menu;
         _font = CreateFont();
         DoubleClick += (_, _) => SettingsRequested?.Invoke();
-        _toolTip.SetToolTip(this, _tooltipText);
+        _hoverTimer.Tick += (_, _) => HoverTick();
+        _hoverTimer.Start();
+    }
+
+    /// <summary>
+    /// Colorkey transparency makes Windows route mouse input through the see-through pixels,
+    /// so MouseEnter/ToolTip never fire in transparent mode. Poll the cursor instead and show
+    /// the tooltip manually after a short dwell — works identically in both display modes.
+    /// </summary>
+    private void HoverTick()
+    {
+        if (!IsHandleCreated || !Visible)
+            return;
+        bool inside = new Rectangle(PointToScreen(Point.Empty), ClientSize).Contains(Cursor.Position);
+        if (!inside)
+        {
+            _hoverSince = default;
+            if (_tooltipShown)
+            {
+                _tooltipShown = false;
+                _toolTip.Hide(this);
+            }
+            return;
+        }
+        if (_hoverSince == default)
+            _hoverSince = DateTime.UtcNow;
+        if (!_tooltipShown && (DateTime.UtcNow - _hoverSince).TotalMilliseconds >= 400)
+        {
+            _tooltipShown = true;
+            _toolTip.Show(_tooltipText, this, 0, -Dpi(64));
+        }
     }
 
     protected override bool ShowWithoutActivation => true;
@@ -92,9 +125,6 @@ internal sealed class WidgetForm : Form
         _snapshot = snapshot;
         _paused = paused;
         _tooltipText = BuildTooltip(snapshot, paused, target);
-        // Don't reset the tooltip mid-hover — it would flicker every sample.
-        if (!ClientRectangle.Contains(PointToClient(MousePosition)))
-            _toolTip.SetToolTip(this, _tooltipText);
         Invalidate();
     }
 
@@ -232,6 +262,7 @@ internal sealed class WidgetForm : Form
     {
         if (disposing)
         {
+            _hoverTimer.Dispose();
             _toolTip.Dispose();
             _font.Dispose();
         }
