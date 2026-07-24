@@ -60,8 +60,10 @@ internal sealed class SettingsForm : Form
     private void BuildLayout()
     {
         var tabs = new TabControl { Dock = DockStyle.Fill };
-        var general = new TabPage("General") { Padding = new Padding(12), AutoScroll = true, UseVisualStyleBackColor = true };
-        var advanced = new TabPage("Advanced") { Padding = new Padding(12), AutoScroll = true, UseVisualStyleBackColor = true };
+        // Explicit SystemColors.Control instead of visual-style backgrounds: the dark color
+        // mode remaps SystemColors, but visual-style tab bodies would stay light.
+        var general = new TabPage("General") { Padding = new Padding(12), AutoScroll = true, BackColor = SystemColors.Control };
+        var advanced = new TabPage("Advanced") { Padding = new Padding(12), AutoScroll = true, BackColor = SystemColors.Control };
         tabs.TabPages.Add(general);
         tabs.TabPages.Add(advanced);
 

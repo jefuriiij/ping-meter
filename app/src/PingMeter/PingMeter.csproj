@@ -2,8 +2,10 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <TargetFramework>net10.0-windows</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
+    <!-- WinForms dark color mode is still marked experimental (WFO5001) -->
+    <NoWarn>$(NoWarn);WFO5001</NoWarn>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <RootNamespace>PingMeter</RootNamespace>

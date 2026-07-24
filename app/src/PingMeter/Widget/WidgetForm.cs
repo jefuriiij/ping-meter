@@ -34,6 +34,8 @@ internal sealed class WidgetForm : Form
     private string _tooltipText = "PingMeter";
 
     /// <summary>Set when size-affecting config changed; the embedder repositions on next tick.</summary>
+    [System.ComponentModel.Browsable(false)]
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
     public bool LayoutDirty { get; set; }
 
     public event Action? SettingsRequested;

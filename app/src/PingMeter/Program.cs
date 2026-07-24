@@ -12,6 +12,7 @@ internal static class Program
             return;
 
         ApplicationConfiguration.Initialize();
+        Application.SetColorMode(SystemColorMode.Dark);
         Application.Run(new TrayContext());
     }
 }
