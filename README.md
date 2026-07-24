@@ -57,6 +57,6 @@ Running a downloaded `PingMeter.exe` may show **"Windows protected your PC"**. T
 
 ## Notes
 
-- Stack: C# / .NET 8 WinForms. The embedding technique (SetParent into `Shell_TrayWnd` / `Shell_SecondaryTrayWnd`) is ported from [TrafficMonitor](https://github.com/zhongyang219/TrafficMonitor)'s Win11 code path.
+- Stack: C# / .NET 10 WinForms (dark-mode UI; requires the .NET 10 Desktop Runtime). The embedding technique (SetParent into `Shell_TrayWnd` / `Shell_SecondaryTrayWnd`) is ported from [TrafficMonitor](https://github.com/zhongyang219/TrafficMonitor)'s Win11 code path.
 - Windows can theoretically break this in a future taskbar rewrite — if embedding ever fails, the widget falls back to floating on top of the taskbar and keeps retrying.
 - Designed for the Windows 11 XAML taskbar. On a classic (Win10/ExplorerPatcher) taskbar the widget still shows but may overlap task buttons on a very full taskbar.
