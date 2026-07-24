@@ -21,6 +21,10 @@ public sealed class AppConfig
     public int HorizontalOffsetPx { get; set; }
 
     public bool ShowSparkline { get; set; } = true;
+
+    /// <summary>Show a red loss % next to the ms readout whenever the stats window contains lost pings.</summary>
+    public bool ShowLossOnWidget { get; set; } = true;
+
     public bool TransparentBackground { get; set; }
     public int StatsWindow { get; set; } = 60;
     public bool StartWithWindows { get; set; }
@@ -72,6 +76,7 @@ public sealed class AppConfig
         Monitors = other.Monitors;
         HorizontalOffsetPx = other.HorizontalOffsetPx;
         ShowSparkline = other.ShowSparkline;
+        ShowLossOnWidget = other.ShowLossOnWidget;
         TransparentBackground = other.TransparentBackground;
         StatsWindow = other.StatsWindow;
         StartWithWindows = other.StartWithWindows;

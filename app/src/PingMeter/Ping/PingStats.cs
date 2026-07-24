@@ -13,7 +13,13 @@ public sealed record StatsSnapshot(
     long MaxMs,
     double LossPercent,
     int SampleCount,
-    long?[] Series);
+    long TotalSent,
+    long TotalLost,
+    long?[] Series)
+{
+    /// <summary>Lifetime loss since app start / Reset / target switch (the ring buffer only covers the stats window).</summary>
+    public double TotalLossPercent => TotalSent > 0 ? 100.0 * TotalLost / TotalSent : 0;
+}
 
 /// <summary>Thread-safe ring buffer of the most recent ping samples.</summary>
 public sealed class PingStats
@@ -22,6 +28,8 @@ public sealed class PingStats
     private PingSample[] _buffer;
     private int _next;
     private int _count;
+    private long _totalSent;
+    private long _totalLost;
 
     public PingStats(int capacity) => _buffer = new PingSample[Math.Max(1, capacity)];
 
@@ -32,6 +40,9 @@ public sealed class PingStats
             _buffer[_next] = sample;
             _next = (_next + 1) % _buffer.Length;
             _count = Math.Min(_count + 1, _buffer.Length);
+            _totalSent++;
+            if (sample.IsLost)
+                _totalLost++;
         }
     }
 
@@ -41,6 +52,8 @@ public sealed class PingStats
         {
             _next = 0;
             _count = 0;
+            _totalSent = 0;
+            _totalLost = 0;
         }
     }
 
@@ -66,9 +79,12 @@ public sealed class PingStats
     public StatsSnapshot GetSnapshot(int seriesLength)
     {
         PingSample[] samples;
+        long totalSent, totalLost;
         lock (_gate)
         {
             samples = SamplesInOrderLocked();
+            totalSent = _totalSent;
+            totalLost = _totalLost;
         }
 
         PingSample? current = samples.Length > 0 ? samples[^1] : null;
@@ -84,7 +100,7 @@ public sealed class PingStats
             .Select(s => s.RoundtripMs)
             .ToArray();
 
-        return new StatsSnapshot(current, min, avg, max, loss, samples.Length, series);
+        return new StatsSnapshot(current, min, avg, max, loss, samples.Length, totalSent, totalLost, series);
     }
 
     private PingSample[] SamplesInOrderLocked()
