@@ -29,6 +29,7 @@ internal sealed class WidgetForm : Form
     private bool _tooltipShown;
     private StatsSnapshot? _snapshot;
     private bool _paused;
+    private bool _lossVisible;
     private uint _dpi = 96;
     private Font _font;
     private string _tooltipText = "PingMeter";
@@ -127,6 +128,12 @@ internal sealed class WidgetForm : Form
         _snapshot = snapshot;
         _paused = paused;
         _tooltipText = BuildTooltip(snapshot, paused, target);
+        bool lossVisible = _config.ShowLossOnWidget && !paused && snapshot.LossPercent > 0;
+        if (lossVisible != _lossVisible)
+        {
+            _lossVisible = lossVisible;
+            LayoutDirty = true; // widget width changes; embedder repositions on next tick
+        }
         Invalidate();
     }
 
@@ -136,6 +143,8 @@ internal sealed class WidgetForm : Form
         // Reserve for 3 digits so the width doesn't jitter as the ping moves.
         int textWidth = TextRenderer.MeasureText("888 ms", _font).Width;
         int width = Dpi(4) + textWidth + Dpi(4);
+        if (_lossVisible)
+            width += TextRenderer.MeasureText("88%", _font).Width + Dpi(3);
         if (_config.ShowSparkline)
             width += Dpi(36) + Dpi(6);
         return new Size(width, height);
@@ -189,6 +198,24 @@ internal sealed class WidgetForm : Form
             textLeft = sparkRect.Right + Dpi(6);
         }
 
+        // Red loss % at the far right, shown only while the stats window contains lost pings.
+        int rightPad = pad;
+        if (_lossVisible && snapshot != null)
+        {
+            string lossText = $"{Math.Max(1, (int)Math.Round(snapshot.LossPercent))}%";
+            var lossSize = TextRenderer.MeasureText(lossText, _font);
+            using var lossBrush = new SolidBrush(BadColor);
+            using var lossFormat = new StringFormat
+            {
+                Alignment = StringAlignment.Far,
+                LineAlignment = StringAlignment.Center,
+                FormatFlags = StringFormatFlags.NoWrap,
+            };
+            g.DrawString(lossText, _font, lossBrush,
+                new RectangleF(ClientSize.Width - pad - lossSize.Width, 0, lossSize.Width + pad, ClientSize.Height), lossFormat);
+            rightPad = pad + lossSize.Width + Dpi(3);
+        }
+
         using var brush = new SolidBrush(textColor);
         using var format = new StringFormat
         {
@@ -197,7 +224,7 @@ internal sealed class WidgetForm : Form
             FormatFlags = StringFormatFlags.NoWrap,
         };
         g.DrawString(text, _font, brush,
-            new RectangleF(textLeft, 0, ClientSize.Width - textLeft - pad, ClientSize.Height), format);
+            new RectangleF(textLeft, 0, ClientSize.Width - textLeft - rightPad, ClientSize.Height), format);
     }
 
     private void DrawSparkline(Graphics g, Rectangle rect, StatsSnapshot? snapshot)
@@ -234,7 +261,7 @@ internal sealed class WidgetForm : Form
         if (snapshot.SampleCount == 0)
             return $"{target} — waiting for first reply…";
         string current = snapshot.Current is { } c ? (c.IsLost ? "timeout" : $"{c.RoundtripMs} ms") : "--";
-        return $"{target}\ncur {current} · min {snapshot.MinMs} · avg {snapshot.AvgMs} · max {snapshot.MaxMs}\nloss {snapshot.LossPercent:0.#}% ({snapshot.SampleCount} samples)";
+        return $"{target}\ncur {current} · min {snapshot.MinMs} · avg {snapshot.AvgMs} · max {snapshot.MaxMs}\nloss {snapshot.LossPercent:0.#}% of last {snapshot.SampleCount} · {snapshot.TotalLost:n0} of {snapshot.TotalSent:n0} since reset ({snapshot.TotalLossPercent:0.#}%)";
     }
 
     private Font CreateFont() => new("Segoe UI", Dpi(13), FontStyle.Regular, GraphicsUnit.Pixel);

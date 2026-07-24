@@ -27,6 +27,7 @@ internal sealed class SettingsForm : Form
     private readonly NumericUpDown _offset = MakeNumeric(0, 1000, 4);
     private readonly NumericUpDown _retention = MakeNumeric(1, 365, 5);
     private readonly CheckBox _sparkline = MakeCheck("Show mini graph");
+    private readonly CheckBox _showLoss = MakeCheck("Show packet loss %");
     private readonly CheckBox _transparent = MakeCheck("See-through background");
     private readonly CheckBox _autostart = MakeCheck("Start automatically when I turn on my PC");
     private readonly CheckBox _autoUpdate = MakeCheck("Tell me when a new version is available");
@@ -106,6 +107,10 @@ internal sealed class SettingsForm : Form
         AddRow(stack, CheckRow(_sparkline,
             helper: "A tiny bar graph of the recent pings next to the number.",
             tip: "Each bar is one ping — taller means slower. Red full-height bars are lost pings."));
+
+        AddRow(stack, CheckRow(_showLoss,
+            helper: "When pings go missing, a red percentage appears next to the number.",
+            tip: "Packet loss = pings that never got an answer. The % covers the statistics period; when nothing is lost, nothing extra is shown. Hover the widget for lifetime totals."));
 
         AddRow(stack, CheckRow(_autostart,
             helper: "PingMeter appears in the taskbar every time Windows starts.",
@@ -377,6 +382,7 @@ internal sealed class SettingsForm : Form
         _green.Value = ClampTo(_green, config.GreenBelowMs);
         _yellow.Value = ClampTo(_yellow, config.YellowBelowMs);
         _sparkline.Checked = config.ShowSparkline;
+        _showLoss.Checked = config.ShowLossOnWidget;
         _transparent.Checked = config.TransparentBackground;
         _monitors.SelectedIndex = (int)config.Monitors;
         _offset.Value = ClampTo(_offset, config.HorizontalOffsetPx);
@@ -400,6 +406,7 @@ internal sealed class SettingsForm : Form
         config.GreenBelowMs = (int)_green.Value;
         config.YellowBelowMs = (int)_yellow.Value;
         config.ShowSparkline = _sparkline.Checked;
+        config.ShowLossOnWidget = _showLoss.Checked;
         config.TransparentBackground = _transparent.Checked;
         config.Monitors = (MonitorSelection)_monitors.SelectedIndex;
         config.HorizontalOffsetPx = (int)_offset.Value;
