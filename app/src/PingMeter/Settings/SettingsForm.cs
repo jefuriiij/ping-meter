@@ -359,27 +359,12 @@ internal sealed class SettingsForm : Form
             {
                 Caption = "PingMeter",
                 Heading = result.Outcome == RepairOutcome.Success ? "Network reset complete" : "Network reset finished with warnings",
-                Text = details + "\n\nA restart is required to finish the reset.\n" +
-                       "Choosing \"Restart now\" gives you 10 seconds — typing  shutdown /a  in a terminal cancels it.",
+                Text = details + "\n\nA restart is required to finish the reset. Save your work first.",
                 Icon = result.Outcome == RepairOutcome.Success ? TaskDialogIcon.ShieldSuccessGreenBar : TaskDialogIcon.Warning,
                 Buttons = { restartNow, restartLater },
             };
             if (TaskDialog.ShowDialog(this, page) == restartNow)
-            {
-                try
-                {
-                    Process.Start(new ProcessStartInfo("shutdown.exe",
-                        "/r /t 10 /c \"Restarting to finish PingMeter's network reset\"")
-                    {
-                        UseShellExecute = false,
-                        CreateNoWindow = true,
-                    });
-                }
-                catch
-                {
-                    // if scheduling the restart fails, the user simply restarts manually
-                }
-            }
+                StartRestartCountdown();
         }
         else
         {
@@ -390,6 +375,68 @@ internal sealed class SettingsForm : Form
                 Text = details + "\n\nThe steps that require a restart didn't succeed, so no restart is needed. You can try again, or run the commands manually as administrator.",
                 Icon = TaskDialogIcon.Warning,
             });
+        }
+    }
+
+    /// <summary>
+    /// Schedule the restart, then show a countdown dialog with a single big
+    /// "Cancel restart" button — no terminal commands, the app aborts it for you.
+    /// </summary>
+    private void StartRestartCountdown()
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo("shutdown.exe",
+                "/r /t 10 /c \"Restarting to finish PingMeter's network reset\"")
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            });
+        }
+        catch
+        {
+            AppendRepairLog("✗ Couldn't schedule the restart — please restart your PC manually");
+            return;
+        }
+        AppendRepairLog("Restart scheduled (10 seconds)");
+
+        var cancelRestart = new TaskDialogButton("Cancel restart");
+        var page = new TaskDialogPage
+        {
+            Caption = "PingMeter",
+            Heading = "Restarting in 10 seconds…",
+            Text = "Save your work — the computer is about to restart.\nNot ready? Click \"Cancel restart\".",
+            Icon = TaskDialogIcon.Warning,
+            Buttons = { cancelRestart },
+            AllowCancel = true, // closing the dialog counts as cancelling, the safe direction
+        };
+
+        int remaining = 10;
+        using var countdown = new System.Windows.Forms.Timer { Interval = 1000 };
+        countdown.Tick += (_, _) =>
+        {
+            remaining--;
+            page.Heading = remaining > 0 ? $"Restarting in {remaining} seconds…" : "Restarting now…";
+        };
+        countdown.Start();
+        TaskDialogButton chosen = TaskDialog.ShowDialog(this, page);
+        countdown.Stop();
+
+        if (chosen == cancelRestart || chosen == TaskDialogButton.Cancel)
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo("shutdown.exe", "/a")
+                {
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                });
+                AppendRepairLog("Restart cancelled — remember to restart later to finish the reset");
+            }
+            catch
+            {
+                AppendRepairLog("✗ Couldn't cancel the restart");
+            }
         }
     }
 
