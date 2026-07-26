@@ -223,6 +223,10 @@ internal sealed class SettingsForm : Form
         return stack;
     }
 
+    /// <summary>"✓/✗ Step name", with an explicit reminder on steps that only apply after a reboot.</summary>
+    private static string StepLine(RepairStepResult step) =>
+        $"{(step.Ok ? "✓" : "✗")} {step.Step}{(step.RequiresRestart ? " (requires restart)" : "")}";
+
     private void AppendRepairLog(string line)
     {
         _repairLog.AppendText($"{DateTime.Now:HH:mm:ss}  {line}{Environment.NewLine}");
@@ -310,7 +314,7 @@ internal sealed class SettingsForm : Form
                 _repairProgress.Style = ProgressBarStyle.Continuous;
             _repairProgress.Value = Math.Min(100, p.Completed * 100 / Math.Max(1, p.Total));
             if (p.LastResult is { } step)
-                AppendRepairLog($"{(step.Ok ? "✓" : "✗")} {step.Step}");
+                AppendRepairLog(StepLine(step));
             _repairStatus.Text = p.CurrentStep is { } next
                 ? $"Step {Math.Min(p.Completed + 1, p.Total)} of {p.Total} — {next}…"
                 : "Finishing…";
@@ -350,7 +354,7 @@ internal sealed class SettingsForm : Form
             return;
         }
 
-        string details = string.Join("\n", result.Steps.Select(s => $"{(s.Ok ? "✓" : "✗")}  {s.Step}"));
+        string details = string.Join("\n", result.Steps.Select(StepLine));
         if (result.RestartNeeded)
         {
             var restartNow = new TaskDialogButton("Restart now");
