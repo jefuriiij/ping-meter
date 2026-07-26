@@ -20,6 +20,9 @@ internal sealed record RepairResult(RepairOutcome Outcome, IReadOnlyList<RepairS
     public bool RestartNeeded => Steps.Any(s => s.Ok && s.RequiresRestart);
 }
 
+/// <summary>Live progress of a full reset: how many steps finished, what's running now.</summary>
+internal sealed record RepairProgress(int Completed, int Total, string? CurrentStep, RepairStepResult? LastResult);
+
 /// <summary>
 /// One-click internet repair (the classic flushdns/release/renew/winsock/tcpip sequence).
 /// The main app runs unelevated by design (taskbar embedding requires it), while most of
@@ -32,6 +35,11 @@ internal static class NetworkRepair
 
     private static readonly string ResultFile = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "PingMeter", "repair-result.json");
+
+    // One JSON line per completed step, appended by the elevated helper and polled by the
+    // main app to drive the progress bar and activity log while the helper runs.
+    private static readonly string ProgressFile = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "PingMeter", "repair-progress.jsonl");
 
     private sealed record Step(string Name, string FileName, string Arguments, bool RequiresRestart);
 
@@ -56,11 +64,12 @@ internal static class NetworkRepair
     }
 
     /// <summary>Relaunch this exe elevated (UAC prompt) to run all five steps; await its JSON result.</summary>
-    public static async Task<RepairResult> RunFullResetAsync()
+    public static async Task<RepairResult> RunFullResetAsync(IProgress<RepairProgress>? progress = null)
     {
         try
         {
             File.Delete(ResultFile);
+            File.Delete(ProgressFile);
         }
         catch
         {
@@ -87,9 +96,16 @@ internal static class NetworkRepair
 
         using (helper)
         {
-            Task done = helper.WaitForExitAsync();
-            if (await Task.WhenAny(done, Task.Delay(TimeSpan.FromMinutes(2))) != done)
-                return new RepairResult(RepairOutcome.Failed, [], "The repair helper did not finish within 2 minutes.");
+            var stopwatch = Stopwatch.StartNew();
+            int reported = 0;
+            while (!helper.HasExited)
+            {
+                if (stopwatch.Elapsed > TimeSpan.FromMinutes(2))
+                    return new RepairResult(RepairOutcome.Failed, [], "The repair helper did not finish within 2 minutes.");
+                await Task.Delay(300);
+                reported = ReportNewProgress(progress, reported);
+            }
+            ReportNewProgress(progress, reported); // catch the final step(s)
         }
 
         try
@@ -113,11 +129,29 @@ internal static class NetworkRepair
     /// </summary>
     public static void RunElevatedHelper()
     {
+        try
+        {
+            File.Delete(ProgressFile);
+        }
+        catch
+        {
+        }
+
         var results = new List<RepairStepResult>();
         foreach (var step in FullResetSteps)
         {
             int exitCode = RunCommand(step.FileName, step.Arguments, TimeSpan.FromSeconds(60));
-            results.Add(new RepairStepResult(step.Name, exitCode, exitCode == 0, step.RequiresRestart));
+            var result = new RepairStepResult(step.Name, exitCode, exitCode == 0, step.RequiresRestart);
+            results.Add(result);
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(ProgressFile)!);
+                File.AppendAllText(ProgressFile, JsonSerializer.Serialize(result) + Environment.NewLine);
+            }
+            catch
+            {
+                // progress is advisory; the final result file is what matters
+            }
         }
 
         try
@@ -129,6 +163,49 @@ internal static class NetworkRepair
         {
             // the parent treats a missing result file as failure
         }
+    }
+
+    /// <summary>Report any steps that completed since the last poll; returns the new reported count.</summary>
+    private static int ReportNewProgress(IProgress<RepairProgress>? progress, int alreadyReported)
+    {
+        if (progress is null)
+            return alreadyReported;
+        List<RepairStepResult> steps = ReadProgressSteps();
+        for (int i = alreadyReported; i < steps.Count; i++)
+        {
+            string? currentStep = i + 1 < FullResetSteps.Length ? FullResetSteps[i + 1].Name : null;
+            progress.Report(new RepairProgress(i + 1, FullResetSteps.Length, currentStep, steps[i]));
+        }
+        return Math.Max(alreadyReported, steps.Count);
+    }
+
+    private static List<RepairStepResult> ReadProgressSteps()
+    {
+        var list = new List<RepairStepResult>();
+        try
+        {
+            if (!File.Exists(ProgressFile))
+                return list;
+            foreach (string line in File.ReadAllLines(ProgressFile))
+            {
+                if (string.IsNullOrWhiteSpace(line))
+                    continue;
+                try
+                {
+                    if (JsonSerializer.Deserialize<RepairStepResult>(line) is { } step)
+                        list.Add(step);
+                }
+                catch
+                {
+                    // a partially written last line — picked up on the next poll
+                }
+            }
+        }
+        catch
+        {
+            // brief write/read collision — next poll will succeed
+        }
+        return list;
     }
 
     private static int RunCommand(string fileName, string arguments, TimeSpan timeout)
