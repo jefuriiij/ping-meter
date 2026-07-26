@@ -39,6 +39,22 @@ internal sealed class SettingsForm : Form
     private readonly Button _quickFix = MakeActionButton("Quick fix — clear DNS cache");
     private readonly Button _fullReset = MakeActionButton("Full reset — rebuild the connection");
     private readonly Label _repairStatus = new() { AutoSize = true, ForeColor = SystemColors.GrayText };
+    private readonly ProgressBar _repairProgress = new()
+    {
+        Dock = DockStyle.Top,
+        Height = 14,
+        Visible = false,
+        Margin = new Padding(0, 0, 0, 6),
+    };
+    private readonly TextBox _repairLog = new()
+    {
+        Multiline = true,
+        ReadOnly = true,
+        ScrollBars = ScrollBars.Vertical,
+        Height = 150,
+        Dock = DockStyle.Top,
+        Margin = new Padding(0),
+    };
     private TabControl? _tabs;
 
     public event Action<AppConfig>? ConfigSaved;
@@ -196,9 +212,38 @@ internal sealed class SettingsForm : Form
             helper: "The full 5-step repair: clear DNS, new IP address, reset Winsock and TCP/IP. Windows will ask for permission, and a restart is needed afterwards.",
             tip: "Runs ipconfig /flushdns, /release, /renew, netsh winsock reset and netsh int ip reset — the classic fix for \"connected, but no internet\". Your connection drops for a few seconds while it runs."));
 
+        AddRow(stack, _repairProgress);
         AddRow(stack, _repairStatus);
+
+        var activityTitle = new Label { Text = "Activity", AutoSize = true, Margin = new Padding(0, 10, 0, 4) };
+        AddRow(stack, activityTitle);
+        AddRow(stack, _repairLog);
+        SetTip("A running record of what the repair buttons did — every line is also written to the connection log.", activityTitle, _repairLog);
+
         return stack;
     }
+
+    private void AppendRepairLog(string line)
+    {
+        _repairLog.AppendText($"{DateTime.Now:HH:mm:ss}  {line}{Environment.NewLine}");
+    }
+
+    private void ShowProgress(bool marquee)
+    {
+        if (marquee)
+        {
+            _repairProgress.Style = ProgressBarStyle.Marquee;
+            _repairProgress.MarqueeAnimationSpeed = 30;
+        }
+        else
+        {
+            _repairProgress.Style = ProgressBarStyle.Continuous;
+            _repairProgress.Value = 0;
+        }
+        _repairProgress.Visible = true;
+    }
+
+    private void HideProgress() => _repairProgress.Visible = false;
 
     private Control ActionRow(Button button, string helper, string tip)
     {
@@ -214,12 +259,16 @@ internal sealed class SettingsForm : Form
     private async Task RunQuickFixAsync()
     {
         SetRepairBusy(true, "Working…");
+        ShowProgress(marquee: true);
+        AppendRepairLog("Quick fix — clearing DNS cache…");
         RepairStarted?.Invoke();
         var result = await NetworkRepair.RunQuickFixAsync();
         bool ok = result.Outcome == RepairOutcome.Success;
         RepairCompleted?.Invoke(ok ? "quick fix: DNS cache cleared" : $"quick fix failed: {result.Error}", false);
         if (IsDisposed)
             return;
+        AppendRepairLog(ok ? "✓ DNS cache cleared" : $"✗ Failed: {result.Error}");
+        HideProgress();
         SetRepairBusy(false, "");
         TaskDialog.ShowDialog(this, new TaskDialogPage
         {
@@ -248,8 +297,25 @@ internal sealed class SettingsForm : Form
             return;
 
         SetRepairBusy(true, "Working — answer the Windows permission prompt…");
+        ShowProgress(marquee: true);
+        AppendRepairLog("Full reset started");
+        AppendRepairLog("Waiting for Windows permission (UAC)…");
         RepairStarted?.Invoke();
-        var result = await NetworkRepair.RunFullResetAsync();
+
+        var progress = new Progress<RepairProgress>(p =>
+        {
+            if (IsDisposed)
+                return;
+            if (_repairProgress.Style != ProgressBarStyle.Continuous)
+                _repairProgress.Style = ProgressBarStyle.Continuous;
+            _repairProgress.Value = Math.Min(100, p.Completed * 100 / Math.Max(1, p.Total));
+            if (p.LastResult is { } step)
+                AppendRepairLog($"{(step.Ok ? "✓" : "✗")} {step.Step}");
+            _repairStatus.Text = p.CurrentStep is { } next
+                ? $"Step {Math.Min(p.Completed + 1, p.Total)} of {p.Total} — {next}…"
+                : "Finishing…";
+        });
+        var result = await NetworkRepair.RunFullResetAsync(progress);
 
         int okCount = result.Steps.Count(s => s.Ok);
         string logSummary = result.Outcome switch
@@ -261,6 +327,13 @@ internal sealed class SettingsForm : Form
         RepairCompleted?.Invoke(logSummary, true);
         if (IsDisposed)
             return;
+        AppendRepairLog(result.Outcome switch
+        {
+            RepairOutcome.Cancelled => "Cancelled — Windows permission was not granted",
+            RepairOutcome.Failed => $"✗ Failed: {result.Error}",
+            _ => $"Done — {okCount}/{result.Steps.Count} steps ok" + (result.RestartNeeded ? ", restart required" : ""),
+        });
+        HideProgress();
         SetRepairBusy(false, "");
 
         if (result.Outcome is RepairOutcome.Cancelled or RepairOutcome.Failed)
