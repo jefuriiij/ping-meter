@@ -160,6 +160,10 @@ internal sealed class TrayContext : ApplicationContext
         };
         _menu.Items.Add(reset);
 
+        var fixInternet = new ToolStripMenuItem("Fix internet…");
+        fixInternet.Click += (_, _) => OpenSettings(tab: 2); // Network tools tab
+        _menu.Items.Add(fixInternet);
+
         _menu.Items.Add(new ToolStripSeparator());
 
         var viewLog = new ToolStripMenuItem("View connection log");
@@ -355,16 +359,40 @@ internal sealed class TrayContext : ApplicationContext
         _tray.Icon = _icons[bucket];
     }
 
-    private void OpenSettings()
+    private void OpenSettings() => OpenSettings(tab: null);
+
+    private void OpenSettings(int? tab)
     {
         if (_settingsForm is { IsDisposed: false })
         {
+            if (tab is { } existing)
+                _settingsForm.SelectTab(existing);
             _settingsForm.Activate();
             return;
         }
         _settingsForm = new SettingsForm(_config);
         _settingsForm.ConfigSaved += ApplySettings;
+        _settingsForm.RepairStarted += OnRepairStarted;
+        _settingsForm.RepairCompleted += OnRepairCompleted;
+        if (tab is { } index)
+            _settingsForm.SelectTab(index);
         _settingsForm.Show();
+    }
+
+    private void OnRepairStarted()
+    {
+        _eventLog.Info("network repair started — pinging paused");
+        _engine.SetPaused(true);
+        RebuildMenu();
+    }
+
+    private void OnRepairCompleted(string summary, bool fullReset)
+    {
+        _eventLog.Info($"network repair: {summary}");
+        // Fresh stats (and unpause) so the user watches the connection come back clean.
+        _engine.Reset();
+        _tracker.Reset();
+        RebuildMenu();
     }
 
     private void ApplySettings(AppConfig updated)

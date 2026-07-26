@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using PingMeter.Config;
+using PingMeter.Network;
 using PingMeter.Update;
 
 namespace PingMeter.Settings;
@@ -34,8 +36,18 @@ internal sealed class SettingsForm : Form
     private readonly CheckBox _eventLog = MakeCheck("Keep a diary of connection problems");
     private readonly CheckBox _csvLog = MakeCheck("Also record every single ping (CSV file)");
     private readonly ComboBox _monitors = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 170 };
+    private readonly Button _quickFix = MakeActionButton("Quick fix — clear DNS cache");
+    private readonly Button _fullReset = MakeActionButton("Full reset — rebuild the connection");
+    private readonly Label _repairStatus = new() { AutoSize = true, ForeColor = SystemColors.GrayText };
+    private TabControl? _tabs;
 
     public event Action<AppConfig>? ConfigSaved;
+
+    /// <summary>Raised before a repair runs — the owner pauses pinging to keep the log clean.</summary>
+    public event Action? RepairStarted;
+
+    /// <summary>Raised after a repair (summary for the log, whether it was the full reset).</summary>
+    public event Action<string, bool>? RepairCompleted;
 
     public SettingsForm(AppConfig current)
     {
@@ -61,15 +73,19 @@ internal sealed class SettingsForm : Form
     private void BuildLayout()
     {
         var tabs = new TabControl { Dock = DockStyle.Fill };
+        _tabs = tabs;
         // Explicit SystemColors.Control instead of visual-style backgrounds: the dark color
         // mode remaps SystemColors, but visual-style tab bodies would stay light.
         var general = new TabPage("General") { Padding = new Padding(12), AutoScroll = true, BackColor = SystemColors.Control };
         var advanced = new TabPage("Advanced") { Padding = new Padding(12), AutoScroll = true, BackColor = SystemColors.Control };
+        var tools = new TabPage("Network tools") { Padding = new Padding(12), AutoScroll = true, BackColor = SystemColors.Control };
         tabs.TabPages.Add(general);
         tabs.TabPages.Add(advanced);
+        tabs.TabPages.Add(tools);
 
         general.Controls.Add(BuildGeneralStack());
         advanced.Controls.Add(BuildAdvancedStack());
+        tools.Controls.Add(BuildNetworkToolsStack());
 
         var buttons = new FlowLayoutPanel
         {
@@ -161,6 +177,168 @@ internal sealed class SettingsForm : Form
 
         return stack;
     }
+
+    private Control BuildNetworkToolsStack()
+    {
+        var stack = MakeStack();
+
+        var intro = MakeHelper("When the internet acts up — connected but nothing loads — these clear Windows' network caches and rebuild the connection.");
+        intro.Margin = new Padding(0, 0, 0, 14);
+        AddRow(stack, intro);
+
+        _quickFix.Click += async (_, _) => await RunQuickFixAsync();
+        AddRow(stack, ActionRow(_quickFix,
+            helper: "Fixes most \"website not found\" problems. Instant and safe — no admin prompt, no restart.",
+            tip: "Runs ipconfig /flushdns: wipes the cached website addresses so Windows looks them up fresh."));
+
+        _fullReset.Click += async (_, _) => await RunFullResetAsync();
+        AddRow(stack, ActionRow(_fullReset,
+            helper: "The full 5-step repair: clear DNS, new IP address, reset Winsock and TCP/IP. Windows will ask for permission, and a restart is needed afterwards.",
+            tip: "Runs ipconfig /flushdns, /release, /renew, netsh winsock reset and netsh int ip reset — the classic fix for \"connected, but no internet\". Your connection drops for a few seconds while it runs."));
+
+        AddRow(stack, _repairStatus);
+        return stack;
+    }
+
+    private Control ActionRow(Button button, string helper, string tip)
+    {
+        var panel = new TableLayoutPanel { ColumnCount = 1, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Dock = DockStyle.Top, Margin = RowMargin };
+        button.Margin = new Padding(0);
+        panel.Controls.Add(button);
+        var helperLabel = MakeHelper(helper);
+        panel.Controls.Add(helperLabel);
+        SetTip(tip, button, helperLabel);
+        return panel;
+    }
+
+    private async Task RunQuickFixAsync()
+    {
+        SetRepairBusy(true, "Working…");
+        RepairStarted?.Invoke();
+        var result = await NetworkRepair.RunQuickFixAsync();
+        bool ok = result.Outcome == RepairOutcome.Success;
+        RepairCompleted?.Invoke(ok ? "quick fix: DNS cache cleared" : $"quick fix failed: {result.Error}", false);
+        if (IsDisposed)
+            return;
+        SetRepairBusy(false, "");
+        TaskDialog.ShowDialog(this, new TaskDialogPage
+        {
+            Caption = "PingMeter",
+            Heading = ok ? "DNS cache cleared" : "Quick fix failed",
+            Text = ok
+                ? "Cached website addresses were wiped — if pages were failing to load, try again now.\n\nStill broken? Run the full reset below."
+                : result.Error,
+            Icon = ok ? TaskDialogIcon.Information : TaskDialogIcon.Error,
+        });
+    }
+
+    private async Task RunFullResetAsync()
+    {
+        var proceed = new TaskDialogButton("Reset now");
+        var confirm = new TaskDialogPage
+        {
+            Caption = "PingMeter",
+            Heading = "Reset Windows networking?",
+            Text = "This runs the full 5-step repair: clear DNS, drop and renew your IP address, and reset Winsock and TCP/IP.\n\n" +
+                   "Your connection will drop for a few seconds, Windows will ask for permission, and a restart is needed to finish.",
+            Icon = TaskDialogIcon.Warning,
+            Buttons = { proceed, TaskDialogButton.Cancel },
+        };
+        if (TaskDialog.ShowDialog(this, confirm) != proceed)
+            return;
+
+        SetRepairBusy(true, "Working — answer the Windows permission prompt…");
+        RepairStarted?.Invoke();
+        var result = await NetworkRepair.RunFullResetAsync();
+
+        int okCount = result.Steps.Count(s => s.Ok);
+        string logSummary = result.Outcome switch
+        {
+            RepairOutcome.Cancelled => "full reset cancelled (no admin permission)",
+            RepairOutcome.Failed => $"full reset failed: {result.Error}",
+            _ => $"full network reset: {okCount}/{result.Steps.Count} steps ok" + (result.RestartNeeded ? ", restart pending" : ""),
+        };
+        RepairCompleted?.Invoke(logSummary, true);
+        if (IsDisposed)
+            return;
+        SetRepairBusy(false, "");
+
+        if (result.Outcome is RepairOutcome.Cancelled or RepairOutcome.Failed)
+        {
+            TaskDialog.ShowDialog(this, new TaskDialogPage
+            {
+                Caption = "PingMeter",
+                Heading = result.Outcome == RepairOutcome.Cancelled ? "Reset cancelled" : "Reset failed",
+                Text = result.Outcome == RepairOutcome.Cancelled
+                    ? "Windows permission was not granted — nothing was changed."
+                    : result.Error,
+                Icon = result.Outcome == RepairOutcome.Cancelled ? TaskDialogIcon.Information : TaskDialogIcon.Error,
+            });
+            return;
+        }
+
+        string details = string.Join("\n", result.Steps.Select(s => $"{(s.Ok ? "✓" : "✗")}  {s.Step}"));
+        if (result.RestartNeeded)
+        {
+            var restartNow = new TaskDialogButton("Restart now");
+            var restartLater = new TaskDialogButton("Restart later");
+            var page = new TaskDialogPage
+            {
+                Caption = "PingMeter",
+                Heading = result.Outcome == RepairOutcome.Success ? "Network reset complete" : "Network reset finished with warnings",
+                Text = details + "\n\nA restart is required to finish the reset.\n" +
+                       "Choosing \"Restart now\" gives you 10 seconds — typing  shutdown /a  in a terminal cancels it.",
+                Icon = result.Outcome == RepairOutcome.Success ? TaskDialogIcon.ShieldSuccessGreenBar : TaskDialogIcon.Warning,
+                Buttons = { restartNow, restartLater },
+            };
+            if (TaskDialog.ShowDialog(this, page) == restartNow)
+            {
+                try
+                {
+                    Process.Start(new ProcessStartInfo("shutdown.exe",
+                        "/r /t 10 /c \"Restarting to finish PingMeter's network reset\"")
+                    {
+                        UseShellExecute = false,
+                        CreateNoWindow = true,
+                    });
+                }
+                catch
+                {
+                    // if scheduling the restart fails, the user simply restarts manually
+                }
+            }
+        }
+        else
+        {
+            TaskDialog.ShowDialog(this, new TaskDialogPage
+            {
+                Caption = "PingMeter",
+                Heading = "Network reset finished with warnings",
+                Text = details + "\n\nThe steps that require a restart didn't succeed, so no restart is needed. You can try again, or run the commands manually as administrator.",
+                Icon = TaskDialogIcon.Warning,
+            });
+        }
+    }
+
+    private void SetRepairBusy(bool busy, string status)
+    {
+        _quickFix.Enabled = !busy;
+        _fullReset.Enabled = !busy;
+        _repairStatus.Text = status;
+    }
+
+    public void SelectTab(int index)
+    {
+        if (_tabs != null && index >= 0 && index < _tabs.TabPages.Count)
+            _tabs.SelectedIndex = index;
+    }
+
+    private static Button MakeActionButton(string text) => new()
+    {
+        Text = text,
+        AutoSize = true,
+        Padding = new Padding(10, 4, 10, 4),
+    };
 
     private Control BuildTargetsBlock()
     {
