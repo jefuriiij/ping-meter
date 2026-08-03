@@ -123,11 +123,11 @@ internal sealed class WidgetForm : Form
         Invalidate();
     }
 
-    public void UpdateSnapshot(StatsSnapshot snapshot, bool paused, string target)
+    public void UpdateSnapshot(StatsSnapshot snapshot, bool paused, string target, string? dnsSummary)
     {
         _snapshot = snapshot;
         _paused = paused;
-        _tooltipText = BuildTooltip(snapshot, paused, target);
+        _tooltipText = BuildTooltip(snapshot, paused, target, dnsSummary);
         bool lossVisible = _config.ShowLossOnWidget && !paused && snapshot.LossPercent > 0;
         if (lossVisible != _lossVisible)
         {
@@ -254,14 +254,25 @@ internal sealed class WidgetForm : Form
         ms < _config.GreenBelowMs ? GoodColor :
         ms < _config.YellowBelowMs ? WarnColor : BadColor;
 
-    private static string BuildTooltip(StatsSnapshot snapshot, bool paused, string target)
+    private static string BuildTooltip(StatsSnapshot snapshot, bool paused, string target, string? dnsSummary)
     {
+        string text;
         if (paused)
-            return $"{target} — paused";
-        if (snapshot.SampleCount == 0)
-            return $"{target} — waiting for first reply…";
-        string current = snapshot.Current is { } c ? (c.IsLost ? "timeout" : $"{c.RoundtripMs} ms") : "--";
-        return $"{target}\ncur {current} · min {snapshot.MinMs} · avg {snapshot.AvgMs} · max {snapshot.MaxMs}\nloss {snapshot.LossPercent:0.#}% of last {snapshot.SampleCount} · {snapshot.TotalLost:n0} of {snapshot.TotalSent:n0} since reset ({snapshot.TotalLossPercent:0.#}%)";
+        {
+            text = $"{target} — paused";
+        }
+        else if (snapshot.SampleCount == 0)
+        {
+            text = $"{target} — waiting for first reply…";
+        }
+        else
+        {
+            string current = snapshot.Current is { } c ? (c.IsLost ? "timeout" : $"{c.RoundtripMs} ms") : "--";
+            text = $"{target}\ncur {current} · min {snapshot.MinMs} · avg {snapshot.AvgMs} · max {snapshot.MaxMs}\nloss {snapshot.LossPercent:0.#}% of last {snapshot.SampleCount} · {snapshot.TotalLost:n0} of {snapshot.TotalSent:n0} since reset ({snapshot.TotalLossPercent:0.#}%)";
+        }
+        if (dnsSummary != null)
+            text += $"\n{dnsSummary}";
+        return text;
     }
 
     private Font CreateFont() => new("Segoe UI", Dpi(13), FontStyle.Regular, GraphicsUnit.Pixel);

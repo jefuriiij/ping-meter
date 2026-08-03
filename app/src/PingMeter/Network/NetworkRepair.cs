@@ -1,5 +1,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Net;
+using System.Net.Sockets;
 using System.Text.Json;
 
 namespace PingMeter.Network;
@@ -32,6 +34,7 @@ internal sealed record RepairProgress(int Completed, int Total, string? CurrentS
 internal static class NetworkRepair
 {
     public const string HelperArgument = "--network-repair";
+    public const string SetDnsArgument = "--set-dns";
 
     private static readonly string ResultFile = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "PingMeter", "repair-result.json");
@@ -108,6 +111,99 @@ internal static class NetworkRepair
             ReportNewProgress(progress, reported); // catch the final step(s)
         }
 
+        return ReadResultFile();
+    }
+
+    /// <summary>
+    /// Change the active adapter's IPv4 DNS via the elevated helper.
+    /// <paramref name="primary"/> null = back to automatic (DHCP).
+    /// </summary>
+    public static async Task<RepairResult> RunSetDnsAsync(int interfaceIndex, string? primary, string? secondary)
+    {
+        try
+        {
+            File.Delete(ResultFile);
+        }
+        catch
+        {
+        }
+
+        string arguments = primary is null
+            ? $"{SetDnsArgument} {interfaceIndex} auto"
+            : secondary is null
+                ? $"{SetDnsArgument} {interfaceIndex} {primary}"
+                : $"{SetDnsArgument} {interfaceIndex} {primary} {secondary}";
+
+        Process helper;
+        try
+        {
+            helper = Process.Start(new ProcessStartInfo(Environment.ProcessPath!, arguments)
+            {
+                UseShellExecute = true,
+                Verb = "runas",
+            })!;
+        }
+        catch (Win32Exception ex) when (ex.NativeErrorCode == 1223) // UAC declined
+        {
+            return new RepairResult(RepairOutcome.Cancelled, [], "Windows permission was not granted.");
+        }
+        catch (Exception ex)
+        {
+            return new RepairResult(RepairOutcome.Failed, [], ex.Message);
+        }
+
+        using (helper)
+        {
+            Task done = helper.WaitForExitAsync();
+            if (await Task.WhenAny(done, Task.Delay(TimeSpan.FromMinutes(2))) != done)
+                return new RepairResult(RepairOutcome.Failed, [], "The DNS helper did not finish within 2 minutes.");
+        }
+        return ReadResultFile();
+    }
+
+    /// <summary>
+    /// Elevated child entry for "--set-dns &lt;interfaceIndex&gt; (auto | &lt;primary&gt; [secondary])".
+    /// IPs are re-validated here before being embedded into the netsh command line.
+    /// </summary>
+    public static void RunSetDnsHelper(string[] args)
+    {
+        var results = new List<RepairStepResult>();
+        if (args.Length >= 3 && int.TryParse(args[1], out int index))
+        {
+            if (string.Equals(args[2], "auto", StringComparison.OrdinalIgnoreCase))
+            {
+                results.Add(RunStep("Switch DNS to automatic", "netsh.exe",
+                    $"interface ipv4 set dnsservers name={index} dhcp"));
+            }
+            else if (IsIPv4(args[2]) && (args.Length < 4 || IsIPv4(args[3])))
+            {
+                results.Add(RunStep($"Set DNS to {args[2]}", "netsh.exe",
+                    $"interface ipv4 set dnsservers name={index} static {args[2]} primary validate=no"));
+                if (args.Length >= 4)
+                {
+                    results.Add(RunStep($"Add backup DNS {args[3]}", "netsh.exe",
+                        $"interface ipv4 add dnsservers name={index} {args[3]} index=2 validate=no"));
+                }
+            }
+            if (results.Count > 0)
+                results.Add(RunStep("Clear DNS cache", "ipconfig.exe", "/flushdns"));
+        }
+        if (results.Count == 0)
+            results.Add(new RepairStepResult("Invalid arguments", -4, false, false));
+        WriteResults(results);
+    }
+
+    private static bool IsIPv4(string value) =>
+        IPAddress.TryParse(value, out var ip) && ip.AddressFamily == AddressFamily.InterNetwork;
+
+    private static RepairStepResult RunStep(string name, string fileName, string arguments)
+    {
+        int exitCode = RunCommand(fileName, arguments, TimeSpan.FromSeconds(60));
+        return new RepairStepResult(name, exitCode, exitCode == 0, RequiresRestart: false);
+    }
+
+    private static RepairResult ReadResultFile()
+    {
         try
         {
             var steps = JsonSerializer.Deserialize<List<RepairStepResult>>(File.ReadAllText(ResultFile)) ?? [];
@@ -115,11 +211,11 @@ internal static class NetworkRepair
                 steps.Count == 0 ? RepairOutcome.Failed :
                 steps.All(s => s.Ok) ? RepairOutcome.Success :
                 RepairOutcome.PartialFailure;
-            return new RepairResult(outcome, steps, steps.Count == 0 ? "The repair helper produced no results." : null);
+            return new RepairResult(outcome, steps, steps.Count == 0 ? "The helper produced no results." : null);
         }
         catch (Exception ex)
         {
-            return new RepairResult(RepairOutcome.Failed, [], $"Couldn't read the repair result: {ex.Message}");
+            return new RepairResult(RepairOutcome.Failed, [], $"Couldn't read the result: {ex.Message}");
         }
     }
 
@@ -154,6 +250,11 @@ internal static class NetworkRepair
             }
         }
 
+        WriteResults(results);
+    }
+
+    private static void WriteResults(List<RepairStepResult> results)
+    {
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(ResultFile)!);

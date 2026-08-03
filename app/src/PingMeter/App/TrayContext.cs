@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Microsoft.Win32;
 using PingMeter.Config;
 using PingMeter.Logging;
+using PingMeter.Network;
 using PingMeter.Ping;
 using PingMeter.Settings;
 using PingMeter.Taskbar;
@@ -34,6 +35,8 @@ internal sealed class TrayContext : ApplicationContext
     private readonly SampleCsvLogger _csvLog = new();
     private readonly StabilityTracker _tracker;
     private readonly System.Windows.Forms.Timer _updateTimer;
+    private readonly System.Windows.Forms.Timer _dnsTimer;
+    private DnsStatus? _dnsStatus;
     private StatusBucket _iconBucket = (StatusBucket)(-1);
     private SettingsForm? _settingsForm;
     private int _lastTaskbarCount = -1;
@@ -106,6 +109,12 @@ internal sealed class TrayContext : ApplicationContext
             _ = AutoCheckForUpdatesAsync();
         };
         startupCheck.Start();
+
+        // DNS shown in the tooltip changes rarely — a relaxed poll keeps it current.
+        _dnsTimer = new System.Windows.Forms.Timer { Interval = 15_000 };
+        _dnsTimer.Tick += (_, _) => _dnsStatus = DnsInfo.GetActive();
+        _dnsTimer.Start();
+        _dnsStatus = DnsInfo.GetActive();
 
         RebuildEmbedders();
         _engine.Start();
@@ -328,7 +337,7 @@ internal sealed class TrayContext : ApplicationContext
         string target = _engine.Target;
 
         foreach (var embedder in _embedders)
-            embedder.Widget.UpdateSnapshot(snapshot, paused, target);
+            embedder.Widget.UpdateSnapshot(snapshot, paused, target, _dnsStatus?.Summary);
 
         string status = paused ? "paused"
             : snapshot.Current is { } c ? (c.IsLost ? "timeout" : $"{c.RoundtripMs} ms")
@@ -389,6 +398,7 @@ internal sealed class TrayContext : ApplicationContext
     private void OnRepairCompleted(string summary, bool fullReset)
     {
         _eventLog.Info($"network repair: {summary}");
+        _dnsStatus = DnsInfo.GetActive(); // DNS may have just changed
         // Fresh stats (and unpause) so the user watches the connection come back clean.
         _engine.Reset();
         _tracker.Reset();
@@ -475,6 +485,8 @@ internal sealed class TrayContext : ApplicationContext
     protected override void ExitThreadCore()
     {
         _eventLog.Info("PingMeter exiting");
+        _dnsTimer.Stop();
+        _dnsTimer.Dispose();
         _updateTimer.Stop();
         _updateTimer.Dispose();
         _taskbarCountTimer.Stop();
