@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Net;
+using System.Net.Sockets;
 using PingMeter.Config;
 using PingMeter.Network;
 using PingMeter.Update;
@@ -36,8 +38,22 @@ internal sealed class SettingsForm : Form
     private readonly CheckBox _eventLog = MakeCheck("Keep a diary of connection problems");
     private readonly CheckBox _csvLog = MakeCheck("Also record every single ping (CSV file)");
     private readonly ComboBox _monitors = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 170 };
+    private static readonly (string Label, string? Primary, string? Secondary)[] DnsPresets =
+    [
+        ("Automatic (from your router)", null, null),
+        ("Cloudflare (1.1.1.1) — fast, private", "1.1.1.1", "1.0.0.1"),
+        ("Google (8.8.8.8)", "8.8.8.8", "8.8.4.4"),
+        ("Quad9 (9.9.9.9) — blocks malware sites", "9.9.9.9", "149.112.112.112"),
+        ("Custom…", "", ""),
+    ];
+
     private readonly Button _quickFix = MakeActionButton("Quick fix — clear DNS cache");
     private readonly Button _fullReset = MakeActionButton("Full reset — rebuild the connection");
+    private readonly Label _dnsCurrent = new() { AutoSize = true, ForeColor = SystemColors.GrayText, Margin = new Padding(0, 0, 0, 6) };
+    private readonly ComboBox _dnsPreset = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 250 };
+    private readonly TextBox _dnsPrimary = new() { Width = 110 };
+    private readonly TextBox _dnsSecondary = new() { Width = 110, PlaceholderText = "optional" };
+    private readonly Button _applyDns = MakeActionButton("Apply DNS");
     private readonly Label _repairStatus = new() { AutoSize = true, ForeColor = SystemColors.GrayText };
     private readonly ProgressBar _repairProgress = new()
     {
@@ -212,6 +228,8 @@ internal sealed class SettingsForm : Form
             helper: "The full 5-step repair: clear DNS, new IP address, reset Winsock and TCP/IP. Windows will ask for permission, and a restart is needed afterwards.",
             tip: "Runs ipconfig /flushdns, /release, /renew, netsh winsock reset and netsh int ip reset — the classic fix for \"connected, but no internet\". Your connection drops for a few seconds while it runs."));
 
+        AddRow(stack, BuildDnsBlock());
+
         AddRow(stack, _repairProgress);
         AddRow(stack, _repairStatus);
 
@@ -248,6 +266,162 @@ internal sealed class SettingsForm : Form
     }
 
     private void HideProgress() => _repairProgress.Visible = false;
+
+    private Control BuildDnsBlock()
+    {
+        var block = new TableLayoutPanel { ColumnCount = 1, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Dock = DockStyle.Top, Margin = RowMargin };
+
+        var title = new Label { Text = "DNS server", AutoSize = true, Margin = new Padding(0, 0, 0, 4) };
+        block.Controls.Add(title);
+        block.Controls.Add(_dnsCurrent);
+
+        foreach (var preset in DnsPresets)
+            _dnsPreset.Items.Add(preset.Label);
+        _dnsPreset.SelectedIndexChanged += (_, _) => OnDnsPresetChanged();
+        block.Controls.Add(_dnsPreset);
+
+        var fields = new TableLayoutPanel { ColumnCount = 4, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Dock = DockStyle.Top, Margin = new Padding(0, 6, 0, 6) };
+        for (int i = 0; i < 4; i++)
+            fields.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        fields.Controls.Add(new Label { Text = "Main", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 0, 4, 0) }, 0, 0);
+        fields.Controls.Add(_dnsPrimary, 1, 0);
+        fields.Controls.Add(new Label { Text = "Backup", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(12, 0, 4, 0) }, 2, 0);
+        fields.Controls.Add(_dnsSecondary, 3, 0);
+        block.Controls.Add(fields);
+
+        _applyDns.Click += async (_, _) => await ApplyDnsAsync();
+        block.Controls.Add(_applyDns);
+
+        var helper = MakeHelper("DNS is the phone book that turns website names into addresses. Pick a preset or enter your own — switching back to Automatic undoes everything.");
+        block.Controls.Add(helper);
+        SetTip("Changes the IPv4 DNS of your active network adapter. Windows asks for permission. A different DNS can make browsing faster or block malware sites — and \"Automatic\" always restores what your router provides.",
+            title, _dnsPreset, _applyDns, helper, _dnsCurrent);
+
+        _dnsPreset.SelectedIndex = 0;
+        RefreshDnsCurrent();
+        return block;
+    }
+
+    private void RefreshDnsCurrent()
+    {
+        var status = DnsInfo.GetActive();
+        _dnsCurrent.Text = status is null
+            ? "Current: unknown — no active network found"
+            : $"Current: {(status.Servers.Count > 0 ? string.Join(", ", status.Servers) : "none")} ({(status.IsManual ? "manual" : "automatic")}) on {status.AdapterName}";
+    }
+
+    private void OnDnsPresetChanged()
+    {
+        var (_, primary, secondary) = DnsPresets[_dnsPreset.SelectedIndex];
+        bool custom = _dnsPreset.SelectedIndex == DnsPresets.Length - 1;
+        bool automatic = primary is null && !custom;
+        if (!custom)
+        {
+            _dnsPrimary.Text = primary ?? "";
+            _dnsSecondary.Text = secondary ?? "";
+        }
+        _dnsPrimary.ReadOnly = _dnsSecondary.ReadOnly = !custom;
+        _dnsPrimary.Enabled = _dnsSecondary.Enabled = !automatic;
+    }
+
+    private async Task ApplyDnsAsync()
+    {
+        var status = DnsInfo.GetActive();
+        if (status is null)
+        {
+            TaskDialog.ShowDialog(this, new TaskDialogPage
+            {
+                Caption = "PingMeter",
+                Heading = "No active network",
+                Text = "Couldn't find an active network adapter — are you connected?",
+                Icon = TaskDialogIcon.Warning,
+            });
+            return;
+        }
+
+        bool automatic = _dnsPreset.SelectedIndex == 0;
+        string? primary = null, secondary = null;
+        if (!automatic)
+        {
+            primary = _dnsPrimary.Text.Trim();
+            secondary = _dnsSecondary.Text.Trim();
+            if (secondary.Length == 0)
+                secondary = null;
+            if (!IsValidIPv4(primary) || (secondary != null && !IsValidIPv4(secondary)))
+            {
+                TaskDialog.ShowDialog(this, new TaskDialogPage
+                {
+                    Caption = "PingMeter",
+                    Heading = "That doesn't look like an IPv4 address",
+                    Text = "A DNS address looks like 1.1.1.1 — four numbers (0–255) separated by dots.",
+                    Icon = TaskDialogIcon.Error,
+                });
+                return;
+            }
+        }
+
+        SetRepairBusy(true, "Working — answer the Windows permission prompt…");
+        ShowProgress(marquee: true);
+        AppendRepairLog(automatic
+            ? $"Switching DNS to automatic on {status.AdapterName}…"
+            : $"Setting DNS to {primary}{(secondary != null ? $" / {secondary}" : "")} on {status.AdapterName}…");
+        RepairStarted?.Invoke();
+
+        var result = await NetworkRepair.RunSetDnsAsync(status.InterfaceIndex, primary, secondary);
+
+        string logSummary = result.Outcome switch
+        {
+            RepairOutcome.Cancelled => "DNS change cancelled (no admin permission)",
+            RepairOutcome.Failed => $"DNS change failed: {result.Error}",
+            RepairOutcome.PartialFailure => "DNS change finished with warnings",
+            _ => automatic ? "DNS switched to automatic" : $"DNS set to {primary}{(secondary != null ? $" / {secondary}" : "")}",
+        };
+        RepairCompleted?.Invoke(logSummary, false);
+        if (IsDisposed)
+            return;
+        foreach (var step in result.Steps)
+            AppendRepairLog(StepLine(step));
+        AppendRepairLog(logSummary);
+        HideProgress();
+        SetRepairBusy(false, "");
+        RefreshDnsCurrent();
+
+        switch (result.Outcome)
+        {
+            case RepairOutcome.Cancelled:
+                TaskDialog.ShowDialog(this, new TaskDialogPage
+                {
+                    Caption = "PingMeter",
+                    Heading = "DNS change cancelled",
+                    Text = "Windows permission was not granted — nothing was changed.",
+                    Icon = TaskDialogIcon.Information,
+                });
+                break;
+            case RepairOutcome.Failed:
+                TaskDialog.ShowDialog(this, new TaskDialogPage
+                {
+                    Caption = "PingMeter",
+                    Heading = "DNS change failed",
+                    Text = result.Error,
+                    Icon = TaskDialogIcon.Error,
+                });
+                break;
+            default:
+                TaskDialog.ShowDialog(this, new TaskDialogPage
+                {
+                    Caption = "PingMeter",
+                    Heading = "DNS updated",
+                    Text = _dnsCurrent.Text + (result.Outcome == RepairOutcome.PartialFailure
+                        ? "\n\nSome steps reported warnings — see the Activity log."
+                        : ""),
+                    Icon = TaskDialogIcon.ShieldSuccessGreenBar,
+                });
+                break;
+        }
+    }
+
+    private static bool IsValidIPv4(string value) =>
+        IPAddress.TryParse(value, out var ip) && ip.AddressFamily == AddressFamily.InterNetwork;
 
     private Control ActionRow(Button button, string helper, string tip)
     {
@@ -448,6 +622,7 @@ internal sealed class SettingsForm : Form
     {
         _quickFix.Enabled = !busy;
         _fullReset.Enabled = !busy;
+        _applyDns.Enabled = !busy;
         _repairStatus.Text = status;
     }
 

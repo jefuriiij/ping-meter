@@ -11,7 +11,8 @@ A tiny Windows 11 utility that embeds a live ping readout **inside the taskbar**
 - **Hover tooltip** with min / avg / max / packet-loss over the stats window.
 - **Network event log** — timeouts, latency spikes, recoveries, and hourly summaries written to daily log files, so you can check after the fact whether your connection was unstable. Optional raw per-ping CSV for graphing.
 - **Check for updates** — manually from the menu, plus an automatic daily check (toggleable) that notifies you when a new release is out.
-- **Network tools** — one-click internet repair ("Fix internet…" in the menu): a quick DNS-cache flush, or the full 5-step reset (flush DNS, release/renew IP, Winsock + TCP/IP reset) via a UAC-elevated helper, with a restart-now/later prompt. The app itself stays unelevated.
+- **Network tools** — one-click internet repair ("Fix internet…" in the menu): a quick DNS-cache flush, or the full 5-step reset (flush DNS, release/renew IP, Winsock + TCP/IP reset) via a UAC-elevated helper, with live progress, an in-tab activity log, and a restart countdown. The app itself stays unelevated.
+- **DNS at a glance and one-click switching** — the hover tooltip shows which DNS server you're using; the Network tools tab can switch the active adapter's IPv4 DNS between Automatic, Cloudflare, Google, Quad9, or custom addresses (admin prompt, instantly reversible).
 - Survives Explorer crashes/restarts (re-embeds automatically), tracks DPI per monitor, needs **no admin rights**.
 
 ## Install
