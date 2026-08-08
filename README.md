@@ -1,68 +1,79 @@
 # PingMeter
 
-A tiny Windows 11 utility that embeds a live ping readout **inside the taskbar** itself — not a tray icon: color-coded latency, a sparkline of recent pings, and hover stats — a permanent replacement for keeping `ping google.com -t` open in cmd.
+A tiny Windows 11 utility that embeds a live ping readout **inside the taskbar** itself — not a tray icon: color-coded latency, a sparkline of recent pings, packet loss, and hover stats — a permanent replacement for keeping `ping google.com -t` open in a terminal.
 
-## Features
-
-- **Taskbar-embedded widget** next to the tray clock, on the primary taskbar, secondary-monitor taskbar(s), or all of them.
-- **Preset targets with quick switch** — right-click the widget or tray icon to jump between google.com, 1.1.1.1, facebook.com, or any host you add.
-- **Color-coded latency** (defaults: green < 50 ms, yellow < 120 ms, red above; timeouts show `T/O`).
-- **Sparkline** of the last ~24 pings; lost pings draw as full-height red bars.
-- **Hover tooltip** with min / avg / max / packet-loss over the stats window.
-- **Network event log** — timeouts, latency spikes, recoveries, and hourly summaries written to daily log files, so you can check after the fact whether your connection was unstable. Optional raw per-ping CSV for graphing.
-- **Check for updates** — manually from the menu, plus an automatic daily check (toggleable) that notifies you when a new release is out.
-- **Network tools** — one-click internet repair ("Fix internet…" in the menu): a quick DNS-cache flush, or the full 5-step reset (flush DNS, release/renew IP, Winsock + TCP/IP reset) via a UAC-elevated helper, with live progress, an in-tab activity log, and a restart countdown. The app itself stays unelevated.
-- **DNS at a glance and one-click switching** — the hover tooltip shows which DNS server you're using; the Network tools tab can switch the active adapter's IPv4 DNS between Automatic, Cloudflare, Google, Quad9, or custom addresses (admin prompt, instantly reversible).
-- Survives Explorer crashes/restarts (re-embeds automatically), tracks DPI per monitor, needs **no admin rights**.
+It also carries a small set of network tools for when the connection actually breaks: a DNS-cache flush, the full internet-repair sequence, and IPv4 DNS switching.
 
 ## Install
-
-Via winget *(pending package approval)*:
 
 ```powershell
 winget install jefuriiij.PingMeter
 ```
 
-Or download `PingMeter.exe` from the [latest release](https://github.com/jefuriiij/ping-meter/releases/latest) (see the SmartScreen note below).
+Or download `PingMeter.exe` from the [latest release](https://github.com/jefuriiij/ping-meter/releases/latest) and put it somewhere permanent (see the [SmartScreen note](#windows-smartscreen-warning-on-downloaded-releases) below).
 
-## Run from source
+**Requirements:** Windows 11 and the [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0). Run it, then tick *"Start automatically when I turn on my PC"* in Settings.
 
-```powershell
-cd app
-dotnet run --project src/PingMeter
-```
+## Features
 
-## Build a single exe
-
-```powershell
-cd app
-dotnet publish src/PingMeter -c Release -r win-x64 --self-contained false /p:PublishSingleFile=true
-# -> src/PingMeter/bin/Release/net8.0-windows/win-x64/publish/PingMeter.exe
-```
+- **Taskbar-embedded widget** next to the tray clock — on the primary taskbar, secondary-monitor taskbar(s), or all of them. It moves out of the way of other taskbar widgets automatically.
+- **Color-coded latency** (defaults: green < 50 ms, yellow < 120 ms, red above; timeouts show `T/O`).
+- **Sparkline** of the recent pings; lost pings draw as full-height red bars.
+- **Packet loss** — a red percentage appears next to the number whenever recent pings go missing, and disappears when the connection is clean.
+- **Preset targets with quick switch** — right-click to jump between google.com, 1.1.1.1, facebook.com, or any host you add.
+- **Hover tooltip** with current / min / avg / max, loss for the recent window *and* since reset, plus the DNS servers currently in use.
+- **Network event log** — timeouts, latency spikes, recoveries and hourly summaries in daily log files, so you can check after the fact whether the connection was unstable. Optional raw per-ping CSV for graphing.
+- **Network tools** (below) — internet repair and DNS switching.
+- **Dark UI**, per-monitor DPI aware, survives Explorer crashes and restarts (re-embeds itself), and runs **without admin rights**.
+- **Update checks** — manual, plus an optional quiet daily check that notifies you when a new release is out.
 
 ## Usage
 
-- **Right-click** the widget or tray icon: switch target, pause, view log, open logs folder, check for updates, settings, exit.
-- **Double-click** either: open settings (targets, interval, timeout, thresholds, monitor placement, logging, autostart).
+- **Right-click** the widget (or the tray icon): switch target · Pause · Reset (clear stats and start fresh) · Fix internet… · View connection log · Open logs folder · Check for updates · Settings · Exit.
+- **Double-click** either one: open Settings.
+- Settings live in **General** (targets, ping interval, colors, mini graph, autostart), **Advanced** (timeout, statistics period, which screens, see-through mode, logging, updates) and **Network tools**. Every option has a plain-English explanation under it and a longer tooltip on hover.
 - Settings are stored at `%APPDATA%\PingMeter\settings.json`.
+
+## Network tools
+
+Everything here is optional, started by you, and prompts for Windows permission — PingMeter itself never runs elevated.
+
+- **Quick fix — clear DNS cache**: `ipconfig /flushdns`. Instant, no admin prompt, fixes most "website not found" problems.
+- **Full reset — rebuild the connection**: the classic sequence (flush DNS → release IP → renew IP → reset Winsock → reset TCP/IP), with a live progress bar, a per-step ✓/✗ activity log, and a restart countdown you can cancel. Steps that only take effect after a reboot say so explicitly.
+- **DNS server**: shows the active adapter's current IPv4 DNS, and switches it between *Automatic (from your router)*, Cloudflare, Google, Quad9, or addresses you type. Switching back to Automatic undoes everything.
 
 ## Logs
 
 Daily files in `%APPDATA%\PingMeter\logs\` (auto-deleted after the retention window, default 30 days):
 
-- `events-YYYY-MM-DD.log` — readable event log: ping timeouts, recovery (with outage duration), latency degraded/normal transitions, hourly min/avg/max/loss summaries, target switches.
-- `samples-YYYY-MM-DD.csv` — optional (off by default): every ping as `timestamp,target,ms`, with an empty ms for timeouts. ~3.5 MB/day at a 1 s interval.
-
-## Windows SmartScreen warning on downloaded releases
-
-Running a downloaded `PingMeter.exe` may show **"Windows protected your PC"**. This is normal for new, unsigned open-source executables — SmartScreen flags any exe without a code-signing certificate or established download reputation, regardless of whether it's safe. Click **More info → Run anyway** to proceed. Each release page lists the exe's SHA-256 so you can verify your download (`Get-FileHash PingMeter.exe` in PowerShell), and you can always build from source instead. The warning fades as a release accumulates downloads; a code-signing certificate would remove it faster, which may happen if the project grows.
+- `events-YYYY-MM-DD.log` — readable event log: ping timeouts, recovery (with outage duration), latency degraded/normal transitions, hourly min/avg/max/loss summaries, target switches, and network-tool actions.
+- `samples-YYYY-MM-DD.csv` — optional (off by default): every ping as `timestamp,target,ms`, empty ms for timeouts. ~3.5 MB/day at a 1 s interval.
 
 ## Privacy
 
-PingMeter collects nothing and sends nothing about you. It makes exactly two kinds of network requests: ICMP pings to the host *you* choose, and (if update checks are enabled) a daily read of this repository's latest-release info from the GitHub API. Logs and settings stay on your machine under `%APPDATA%\PingMeter`. Network changes (repair, DNS) only happen when you click the button and approve the Windows permission prompt.
+PingMeter collects nothing and sends nothing about you. It makes exactly two kinds of network requests: ICMP pings to the host *you* choose, and (if update checks are enabled) a daily read of this repository's latest-release info from the GitHub API. Logs and settings stay on your machine under `%APPDATA%\PingMeter`. Network changes only happen when you click the button and approve the Windows permission prompt.
+
+## Windows SmartScreen warning on downloaded releases
+
+Running a downloaded `PingMeter.exe` may show **"Windows protected your PC"**. This is normal for new, unsigned open-source executables — SmartScreen flags any exe without a code-signing certificate or established download reputation, regardless of whether it's safe. Click **More info → Run anyway** to proceed, or install via winget, which doesn't show it. Each release page lists the exe's SHA-256 so you can verify your download (`Get-FileHash PingMeter.exe`), and you can always build from source instead.
+
+## Build from source
+
+```powershell
+cd app
+dotnet run --project src/PingMeter          # run it
+
+dotnet publish src/PingMeter -c Release -r win-x64 --self-contained false /p:PublishSingleFile=true
+# -> src/PingMeter/bin/Release/net10.0-windows/win-x64/publish/PingMeter.exe
+```
 
 ## Notes
 
-- Stack: C# / .NET 10 WinForms (dark-mode UI; requires the .NET 10 Desktop Runtime). The embedding technique (SetParent into `Shell_TrayWnd` / `Shell_SecondaryTrayWnd`) keeps the widget next to the tray clock.
-- Windows can theoretically break this in a future taskbar rewrite — if embedding ever fails, the widget falls back to floating on top of the taskbar and keeps retrying.
-- Designed for the Windows 11 XAML taskbar. On a classic (Win10/ExplorerPatcher) taskbar the widget still shows but may overlap task buttons on a very full taskbar.
+- Stack: C# / .NET 10 WinForms. The taskbar-embedding technique (`SetParent` into `Shell_TrayWnd` / `Shell_SecondaryTrayWnd`) keeps the widget next to the tray clock.
+- Windows could break this in a future taskbar rewrite — if embedding ever fails, the widget falls back to floating above the taskbar and keeps retrying.
+- Designed for the Windows 11 XAML taskbar. On a classic (Windows 10 / ExplorerPatcher) taskbar the widget still shows, but may overlap task buttons on a very full taskbar.
+- In see-through mode, clicks land only on the visible pixels (the number and graph); the tray icon always works as a fallback.
+
+## License
+
+[MIT](LICENSE)
