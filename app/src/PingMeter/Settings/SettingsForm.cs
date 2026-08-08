@@ -86,18 +86,54 @@ internal sealed class SettingsForm : Form
         _working = current.Clone();
 
         Text = $"PingMeter Settings — v{UpdateChecker.CurrentVersion}";
-        FormBorderStyle = FormBorderStyle.FixedDialog;
-        MaximizeBox = false;
+        // Resizable and never taller than the screen: a winget moderator found the old
+        // fixed 648px dialog running off the bottom of a small VM screen with no way to
+        // resize it. Tab pages scroll (AutoScroll) and the button strip is docked to the
+        // form, so the dialog stays usable at any height.
+        FormBorderStyle = FormBorderStyle.Sizable;
+        MaximizeBox = true;
         MinimizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
         AutoScaleMode = AutoScaleMode.Dpi;
         AutoScaleDimensions = new SizeF(96F, 96F);
+        MinimumSize = new Size(460, 300);
         ClientSize = new Size(440, 648);
 
         _monitors.Items.AddRange(["Main screen only", "Second screen(s) only", "Every screen"]);
 
         BuildLayout();
         LoadFrom(_working);
+    }
+
+    protected override void OnShown(EventArgs e)
+    {
+        base.OnShown(e);
+        FitToWorkArea();
+    }
+
+    /// <summary>
+    /// Shrink the dialog to fit the monitor it opened on (DPI scaling has already been
+    /// applied by now) and pull it fully inside the work area, so the OK/Apply/Cancel
+    /// strip can never sit below the screen edge on small displays.
+    /// </summary>
+    private void FitToWorkArea()
+    {
+        Rectangle work = Screen.FromControl(this).WorkingArea;
+        int maxHeight = Math.Max(MinimumSize.Height, work.Height - 40);
+        int maxWidth = Math.Max(MinimumSize.Width, work.Width - 40);
+
+        var size = new Size(Math.Min(Width, maxWidth), Math.Min(Height, maxHeight));
+        if (size != Size)
+        {
+            Size = size;
+            // Re-center: CenterScreen positioned us using the pre-clamp height.
+            Location = new Point(work.X + (work.Width - Width) / 2, work.Y + (work.Height - Height) / 2);
+        }
+
+        int x = Math.Min(Math.Max(Left, work.Left), work.Right - Width);
+        int y = Math.Min(Math.Max(Top, work.Top), work.Bottom - Height);
+        if (x != Left || y != Top)
+            Location = new Point(x, y);
     }
 
     // ---------------------------------------------------------------- layout

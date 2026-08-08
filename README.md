@@ -57,6 +57,10 @@ Daily files in `%APPDATA%\PingMeter\logs\` (auto-deleted after the retention win
 
 Running a downloaded `PingMeter.exe` may show **"Windows protected your PC"**. This is normal for new, unsigned open-source executables — SmartScreen flags any exe without a code-signing certificate or established download reputation, regardless of whether it's safe. Click **More info → Run anyway** to proceed. Each release page lists the exe's SHA-256 so you can verify your download (`Get-FileHash PingMeter.exe` in PowerShell), and you can always build from source instead. The warning fades as a release accumulates downloads; a code-signing certificate would remove it faster, which may happen if the project grows.
 
+## Privacy
+
+PingMeter collects nothing and sends nothing about you. It makes exactly two kinds of network requests: ICMP pings to the host *you* choose, and (if update checks are enabled) a daily read of this repository's latest-release info from the GitHub API. Logs and settings stay on your machine under `%APPDATA%\PingMeter`. Network changes (repair, DNS) only happen when you click the button and approve the Windows permission prompt.
+
 ## Notes
 
 - Stack: C# / .NET 10 WinForms (dark-mode UI; requires the .NET 10 Desktop Runtime). The embedding technique (SetParent into `Shell_TrayWnd` / `Shell_SecondaryTrayWnd`) keeps the widget next to the tray clock.
