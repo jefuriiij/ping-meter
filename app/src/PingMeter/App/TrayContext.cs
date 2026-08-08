@@ -383,6 +383,12 @@ internal sealed class TrayContext : ApplicationContext
         _settingsForm.ConfigSaved += ApplySettings;
         _settingsForm.RepairStarted += OnRepairStarted;
         _settingsForm.RepairCompleted += OnRepairCompleted;
+        _settingsForm.DnsPresetsChanged += presets =>
+        {
+            // Persist immediately: a saved preset must survive closing the dialog with Cancel.
+            _config.DnsPresets = presets.Select(p => new DnsPreset { Name = p.Name, Primary = p.Primary, Secondary = p.Secondary }).ToList();
+            ConfigStore.Save(_config);
+        };
         if (tab is { } index)
             _settingsForm.SelectTab(index);
         _settingsForm.Show();

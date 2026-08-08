@@ -1,3 +1,6 @@
+using System.Net;
+using System.Net.Sockets;
+
 namespace PingMeter.Config;
 
 public enum MonitorSelection
@@ -5,6 +8,14 @@ public enum MonitorSelection
     Primary,
     Secondary,
     All,
+}
+
+/// <summary>A user-saved DNS server combination, listed in the settings dropdown.</summary>
+public sealed class DnsPreset
+{
+    public string Name { get; set; } = "";
+    public string Primary { get; set; } = "";
+    public string? Secondary { get; set; }
 }
 
 public sealed class AppConfig
@@ -33,6 +44,9 @@ public sealed class AppConfig
     public bool SampleCsvEnabled { get; set; }
     public int LogRetentionDays { get; set; } = 30;
 
+    /// <summary>DNS combinations the user saved from the Network tools tab.</summary>
+    public List<DnsPreset> DnsPresets { get; set; } = [];
+
     // App state, not user settings — carried in the same file for simplicity.
     public DateTime LastUpdateCheckUtc { get; set; }
     public string? LastNotifiedVersion { get; set; }
@@ -56,14 +70,36 @@ public sealed class AppConfig
         StatsWindow = Math.Clamp(StatsWindow, 10, 600);
         LogRetentionDays = Math.Clamp(LogRetentionDays, 1, 365);
         HorizontalOffsetPx = Math.Clamp(HorizontalOffsetPx, 0, 1000);
+
+        DnsPresets = DnsPresets
+            .Where(p => !string.IsNullOrWhiteSpace(p.Name) && IsIPv4(p.Primary))
+            .Select(p => new DnsPreset
+            {
+                Name = p.Name.Trim(),
+                Primary = p.Primary.Trim(),
+                Secondary = IsIPv4(p.Secondary) ? p.Secondary!.Trim() : null,
+            })
+            .GroupBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.First())
+            .Take(20)
+            .ToList();
     }
+
+    private static bool IsIPv4(string? value) =>
+        value != null &&
+        IPAddress.TryParse(value.Trim(), out var ip) &&
+        ip.AddressFamily == AddressFamily.InterNetwork;
 
     public AppConfig Clone()
     {
         var copy = (AppConfig)MemberwiseClone();
         copy.Targets = [.. Targets];
+        copy.DnsPresets = ClonePresets(DnsPresets);
         return copy;
     }
+
+    private static List<DnsPreset> ClonePresets(IEnumerable<DnsPreset> presets) =>
+        presets.Select(p => new DnsPreset { Name = p.Name, Primary = p.Primary, Secondary = p.Secondary }).ToList();
 
     public void CopyFrom(AppConfig other)
     {
@@ -84,6 +120,7 @@ public sealed class AppConfig
         EventLogEnabled = other.EventLogEnabled;
         SampleCsvEnabled = other.SampleCsvEnabled;
         LogRetentionDays = other.LogRetentionDays;
+        DnsPresets = ClonePresets(other.DnsPresets);
         LastUpdateCheckUtc = other.LastUpdateCheckUtc;
         LastNotifiedVersion = other.LastNotifiedVersion;
     }
