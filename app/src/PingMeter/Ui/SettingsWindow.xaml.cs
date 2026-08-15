@@ -18,9 +18,18 @@ public partial class SettingsWindow : FluentWindow
     /// <summary>Raised on Save with the edited config — same contract as the classic dialog.</summary>
     public event Action<AppConfig>? ConfigSaved;
 
+    /// <summary>Raised before/after a network repair, so pinging pauses and the log records it.</summary>
+    public event Action? RepairStarted;
+
+    public event Action<string, bool>? RepairCompleted;
+
+    /// <summary>Saved DNS combinations changed — persist immediately, before any Save/Cancel.</summary>
+    public event Action<List<DnsPreset>>? DnsPresetsChanged;
+
     public SettingsWindow(AppConfig current)
     {
         _viewModel = new SettingsViewModel(current);
+        _viewModel.DnsPresetsChanged += presets => DnsPresetsChanged?.Invoke(presets);
         InitializeComponent();
         DataContext = _viewModel;
         PageHost.Content = new GeneralPage { DataContext = _viewModel };
@@ -36,8 +45,24 @@ public partial class SettingsWindow : FluentWindow
         {
             "general" => new GeneralPage { DataContext = _viewModel },
             "advanced" => new AdvancedPage { DataContext = _viewModel },
+            "network" => BuildNetworkPage(),
             _ => new PlaceholderPage(),
         };
+    }
+
+    /// <summary>Open on a specific sidebar entry (0 General, 1 Advanced, 2 Network tools).</summary>
+    public void SelectPage(int index)
+    {
+        if (index >= 0 && index < NavList.Items.Count)
+            NavList.SelectedIndex = index;
+    }
+
+    private NetworkToolsPage BuildNetworkPage()
+    {
+        var page = new NetworkToolsPage { DataContext = _viewModel };
+        page.RepairStarted += () => RepairStarted?.Invoke();
+        page.RepairCompleted += (summary, full) => RepairCompleted?.Invoke(summary, full);
+        return page;
     }
 
     /// <summary>

@@ -123,6 +123,38 @@ internal sealed class SettingsViewModel : INotifyPropertyChanged
         set => SetConfig(v => _working.LogRetentionDays = (int)v, value, _working.LogRetentionDays);
     }
 
+    // ---- Saved DNS combinations ----
+
+    /// <summary>Raised when the saved list changes, so the owner can persist it immediately.</summary>
+    public event Action<List<DnsPreset>>? DnsPresetsChanged;
+
+    public IReadOnlyList<DnsPreset> DnsPresets => _working.DnsPresets;
+
+    /// <summary>Adds or overwrites a saved combination and persists straight away.</summary>
+    public void SaveDnsPreset(string name, string primary, string? secondary)
+    {
+        var existing = _working.DnsPresets.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
+        if (existing != null)
+        {
+            existing.Primary = primary;
+            existing.Secondary = secondary;
+        }
+        else
+        {
+            _working.DnsPresets.Add(new DnsPreset { Name = name, Primary = primary, Secondary = secondary });
+        }
+        _working.Normalize();
+        DnsPresetsChanged?.Invoke(_working.DnsPresets);
+    }
+
+    public void RemoveDnsPreset(int index)
+    {
+        if (index < 0 || index >= _working.DnsPresets.Count)
+            return;
+        _working.DnsPresets.RemoveAt(index);
+        DnsPresetsChanged?.Invoke(_working.DnsPresets);
+    }
+
     public void AddTarget()
     {
         string host = NewTarget.Trim();

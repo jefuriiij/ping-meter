@@ -172,7 +172,7 @@ internal sealed class TrayContext : ApplicationContext
         _menu.Items.Add(reset);
 
         var fixInternet = new ToolStripMenuItem("Fix internet…");
-        fixInternet.Click += (_, _) => OpenSettings(tab: 2); // Network tools tab
+        fixInternet.Click += (_, _) => OpenFluentSettings(page: 2); // Network tools
         _menu.Items.Add(fixInternet);
 
         _menu.Items.Add(new ToolStripSeparator());
@@ -402,20 +402,30 @@ internal sealed class TrayContext : ApplicationContext
         _settingsForm.Show();
     }
 
-    private void OpenFluentSettings()
+    private void OpenFluentSettings(int page = 0)
     {
         try
         {
             if (_fluentSettings is { IsLoaded: true })
             {
+                _fluentSettings.SelectPage(page);
                 _fluentSettings.Activate();
                 return;
             }
             WpfHost.EnsureInitialized();
             _fluentSettings = new SettingsWindow(_config);
             _fluentSettings.ConfigSaved += ApplySettings;
+            _fluentSettings.RepairStarted += OnRepairStarted;
+            _fluentSettings.RepairCompleted += OnRepairCompleted;
+            _fluentSettings.DnsPresetsChanged += presets =>
+            {
+                // Persist immediately: a saved preset must survive closing with Cancel.
+                _config.DnsPresets = presets.Select(p => new DnsPreset { Name = p.Name, Primary = p.Primary, Secondary = p.Secondary }).ToList();
+                ConfigStore.Save(_config);
+            };
             _fluentSettings.Closed += (_, _) => _fluentSettings = null;
             _fluentSettings.Show();
+            _fluentSettings.SelectPage(page);
             _fluentSettings.Activate();
         }
         catch (Exception ex)
