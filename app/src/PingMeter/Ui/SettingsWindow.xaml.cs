@@ -1,3 +1,6 @@
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
 using PingMeter.Config;
 using PingMeter.Ui.Pages;
 using Wpf.Ui.Controls;
@@ -10,12 +13,6 @@ namespace PingMeter.Ui;
 /// </summary>
 public partial class SettingsWindow : FluentWindow
 {
-    /// <summary>
-    /// Pages are created by the navigation service via a parameterless constructor, so
-    /// they pick the view model up from here rather than through DI.
-    /// </summary>
-    internal static SettingsViewModel? ActiveViewModel { get; private set; }
-
     private readonly SettingsViewModel _viewModel;
 
     /// <summary>Raised on Save with the edited config — same contract as the classic dialog.</summary>
@@ -24,19 +21,52 @@ public partial class SettingsWindow : FluentWindow
     public SettingsWindow(AppConfig current)
     {
         _viewModel = new SettingsViewModel(current);
-        ActiveViewModel = _viewModel;
-
         InitializeComponent();
         DataContext = _viewModel;
-
-        Loaded += (_, _) => Navigation.Navigate(typeof(GeneralPage));
+        PageHost.Content = new GeneralPage { DataContext = _viewModel };
     }
 
-    private void OnSave(object sender, System.Windows.RoutedEventArgs e)
+    private void OnNavigationChanged(object sender, SelectionChangedEventArgs e)
+    {
+        // The initially-selected item raises this while the XAML is still loading,
+        // before PageHost exists; the constructor sets the first page itself.
+        if (PageHost is null || NavList.SelectedItem is not ListBoxItem item)
+            return;
+        PageHost.Content = item.Tag as string == "general"
+            ? new GeneralPage { DataContext = _viewModel }
+            : new PlaceholderPage();
+    }
+
+    /// <summary>
+    /// Scroll the current page from anywhere in the window. Handled at the window (the
+    /// root of the tunnelling route) because child controls otherwise swallow the wheel.
+    /// </summary>
+    private void OnPreviewMouseWheel(object sender, System.Windows.Input.MouseWheelEventArgs e)
+    {
+        if (FindScrollViewer(PageHost) is not { } scroller || scroller.ScrollableHeight <= 0)
+            return;
+        scroller.ScrollToVerticalOffset(scroller.VerticalOffset - e.Delta);
+        e.Handled = true;
+    }
+
+    private static ScrollViewer? FindScrollViewer(DependencyObject root)
+    {
+        if (root is ScrollViewer found)
+            return found;
+        int count = VisualTreeHelper.GetChildrenCount(root);
+        for (int i = 0; i < count; i++)
+        {
+            if (FindScrollViewer(VisualTreeHelper.GetChild(root, i)) is { } scroller)
+                return scroller;
+        }
+        return null;
+    }
+
+    private void OnSave(object sender, RoutedEventArgs e)
     {
         ConfigSaved?.Invoke(_viewModel.BuildConfig());
         Close();
     }
 
-    private void OnCancel(object sender, System.Windows.RoutedEventArgs e) => Close();
+    private void OnCancel(object sender, RoutedEventArgs e) => Close();
 }

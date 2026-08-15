@@ -6,12 +6,9 @@
     Title="General"
     TextElement.Foreground="{DynamicResource TextFillColorPrimaryBrush}">
 
-    <!--  PreviewMouseWheel: without it the wheel only works over the scrollbar itself,
-          and child controls (the target list) swallow it entirely.  -->
     <ScrollViewer
         x:Name="PageScroll"
         HorizontalScrollBarVisibility="Disabled"
-        PreviewMouseWheel="OnPreviewMouseWheel"
         VerticalScrollBarVisibility="Auto">
         <StackPanel Margin="24,8,24,24">
 
