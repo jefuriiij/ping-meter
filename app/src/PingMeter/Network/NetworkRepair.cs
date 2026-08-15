@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Text.Json;
+using Microsoft.Win32;
 
 namespace PingMeter.Network;
 
@@ -24,6 +25,24 @@ internal sealed record RepairResult(RepairOutcome Outcome, IReadOnlyList<RepairS
 
 /// <summary>Live progress of a full reset: how many steps finished, what's running now.</summary>
 internal sealed record RepairProgress(int Completed, int Total, string? CurrentStep, RepairStepResult? LastResult);
+
+/// <summary>
+/// What one DNS server should be set to. <paramref name="Doh"/> null means "leave the
+/// existing encryption setting alone" — the classic dialog has no DoH UI and must not
+/// silently clear what the user configured elsewhere.
+/// </summary>
+internal sealed record DnsServerRequest(string Address, DohMode? Doh, string? Template);
+
+/// <summary>
+/// The whole DNS change, handed to the elevated helper as base64 JSON — a single argument,
+/// so no quoting or ordering games on the command line.
+/// </summary>
+internal sealed record DnsRequest(
+    int InterfaceIndex,
+    string AdapterId,
+    bool Automatic,
+    DnsServerRequest? Primary,
+    DnsServerRequest? Secondary);
 
 /// <summary>
 /// One-click internet repair (the classic flushdns/release/renew/winsock/tcpip sequence).
@@ -115,10 +134,10 @@ internal static class NetworkRepair
     }
 
     /// <summary>
-    /// Change the active adapter's IPv4 DNS via the elevated helper.
-    /// <paramref name="primary"/> null = back to automatic (DHCP).
+    /// Change the active adapter's IPv4 DNS (and its encryption settings) via the elevated
+    /// helper. <see cref="DnsRequest.Automatic"/> means hand control back to DHCP.
     /// </summary>
-    public static async Task<RepairResult> RunSetDnsAsync(int interfaceIndex, string? primary, string? secondary)
+    public static async Task<RepairResult> RunSetDnsAsync(DnsRequest request)
     {
         try
         {
@@ -128,11 +147,8 @@ internal static class NetworkRepair
         {
         }
 
-        string arguments = primary is null
-            ? $"{SetDnsArgument} {interfaceIndex} auto"
-            : secondary is null
-                ? $"{SetDnsArgument} {interfaceIndex} {primary}"
-                : $"{SetDnsArgument} {interfaceIndex} {primary} {secondary}";
+        string payload = Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(request));
+        string arguments = $"{SetDnsArgument} {payload}";
 
         Process helper;
         try
@@ -162,36 +178,137 @@ internal static class NetworkRepair
     }
 
     /// <summary>
-    /// Elevated child entry for "--set-dns &lt;interfaceIndex&gt; (auto | &lt;primary&gt; [secondary])".
-    /// IPs are re-validated here before being embedded into the netsh command line.
+    /// Elevated child entry for "--set-dns &lt;base64 json&gt;". Everything is re-validated
+    /// here — this runs with admin rights, so nothing from the payload is trusted blindly.
     /// </summary>
     public static void RunSetDnsHelper(string[] args)
     {
         var results = new List<RepairStepResult>();
-        if (args.Length >= 3 && int.TryParse(args[1], out int index))
+        DnsRequest? request = null;
+        try
         {
-            if (string.Equals(args[2], "auto", StringComparison.OrdinalIgnoreCase))
-            {
-                results.Add(RunStep("Switch DNS to automatic", "netsh.exe",
-                    $"interface ipv4 set dnsservers name={index} dhcp"));
-            }
-            else if (IsIPv4(args[2]) && (args.Length < 4 || IsIPv4(args[3])))
-            {
-                results.Add(RunStep($"Set DNS to {args[2]}", "netsh.exe",
-                    $"interface ipv4 set dnsservers name={index} static {args[2]} primary validate=no"));
-                if (args.Length >= 4)
-                {
-                    results.Add(RunStep($"Add backup DNS {args[3]}", "netsh.exe",
-                        $"interface ipv4 add dnsservers name={index} {args[3]} index=2 validate=no"));
-                }
-            }
-            if (results.Count > 0)
-                results.Add(RunStep("Clear DNS cache", "ipconfig.exe", "/flushdns"));
+            if (args.Length >= 2)
+                request = JsonSerializer.Deserialize<DnsRequest>(Convert.FromBase64String(args[1]));
         }
-        if (results.Count == 0)
-            results.Add(new RepairStepResult("Invalid arguments", -4, false, false));
+        catch
+        {
+            request = null;
+        }
+
+        if (request is null || request.InterfaceIndex <= 0 || !IsAdapterGuid(request.AdapterId))
+        {
+            WriteResults([new RepairStepResult("Invalid arguments", -4, false, false)]);
+            return;
+        }
+
+        int index = request.InterfaceIndex;
+        if (request.Automatic)
+        {
+            // Back to DHCP: drop any encryption settings we may have written before.
+            foreach (string server in ReadConfiguredDohServers(request.AdapterId))
+                results.Add(SetDohRegistry(request.AdapterId, server, DohMode.Off, null));
+            results.Add(RunStep("Switch DNS to automatic", "netsh.exe",
+                $"interface ipv4 set dnsservers name={index} dhcp"));
+        }
+        else
+        {
+            var servers = new[] { request.Primary, request.Secondary }
+                .Where(s => s is not null && IsIPv4(s.Address))
+                .Select(s => s!)
+                .ToList();
+            if (servers.Count == 0)
+            {
+                WriteResults([new RepairStepResult("Invalid arguments", -4, false, false)]);
+                return;
+            }
+
+            // Encryption first, then the servers — applying the addresses last makes the
+            // DNS client pick the new DoH settings up straight away.
+            foreach (var server in servers)
+            {
+                if (server.Doh is not { } doh)
+                    continue; // caller didn't ask about encryption — leave it untouched
+                if (doh == DohMode.Manual && IsDohTemplate(server.Template))
+                {
+                    results.Add(RunStep($"Register DoH template for {server.Address}", "netsh.exe",
+                        $"dns add encryption server={server.Address} dohtemplate={server.Template} autoupgrade=yes udpfallback=no"));
+                }
+                results.Add(SetDohRegistry(request.AdapterId, server.Address, doh, server.Template));
+            }
+
+            results.Add(RunStep($"Set DNS to {servers[0].Address}", "netsh.exe",
+                $"interface ipv4 set dnsservers name={index} static {servers[0].Address} primary validate=no"));
+            if (servers.Count > 1)
+            {
+                results.Add(RunStep($"Add backup DNS {servers[1].Address}", "netsh.exe",
+                    $"interface ipv4 add dnsservers name={index} {servers[1].Address} index=2 validate=no"));
+            }
+        }
+
+        results.Add(RunStep("Clear DNS cache", "ipconfig.exe", "/flushdns"));
         WriteResults(results);
     }
+
+    /// <summary>Write (or clear) one server's DoH setting. Needs the elevation we already have.</summary>
+    private static RepairStepResult SetDohRegistry(string adapterId, string server, DohMode mode, string? template)
+    {
+        string label = mode switch
+        {
+            DohMode.Automatic => $"Encrypt {server} (automatic template)",
+            DohMode.Manual => $"Encrypt {server} (custom template)",
+            _ => $"Turn off encryption for {server}",
+        };
+        try
+        {
+            string path = DnsInfo.DohKeyPath(adapterId, server);
+            if (mode == DohMode.Off)
+            {
+                Registry.LocalMachine.DeleteSubKeyTree(path, throwOnMissingSubKey: false);
+                return new RepairStepResult(label, 0, true, false);
+            }
+
+            using var key = Registry.LocalMachine.CreateSubKey(path, writable: true);
+            if (key is null)
+                return new RepairStepResult(label, -5, false, false);
+            // Windows' own encoding: 1 = built-in template, 2 = the custom one below.
+            key.SetValue("DohFlags", mode == DohMode.Manual ? 2L : 1L, RegistryValueKind.QWord);
+            if (mode == DohMode.Manual && IsDohTemplate(template))
+                key.SetValue("DohTemplate", template!, RegistryValueKind.String);
+            else
+                key.DeleteValue("DohTemplate", throwOnMissingValue: false);
+            return new RepairStepResult(label, 0, true, false);
+        }
+        catch
+        {
+            return new RepairStepResult(label, -5, false, false);
+        }
+    }
+
+    /// <summary>Servers that currently have an encryption setting on this adapter.</summary>
+    private static List<string> ReadConfiguredDohServers(string adapterId)
+    {
+        try
+        {
+            using var key = Registry.LocalMachine.OpenSubKey(
+                $@"SYSTEM\CurrentControlSet\Services\Dnscache\InterfaceSpecificParameters\{adapterId}\DohInterfaceSettings\Doh");
+            return key?.GetSubKeyNames().ToList() ?? [];
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
+    /// <summary>Adapter ids come from the OS and land in a registry path — allow only GUID text.</summary>
+    private static bool IsAdapterGuid(string? value) =>
+        value != null && Guid.TryParse(value.Trim('{', '}'), out _);
+
+    /// <summary>Templates land on a command line and in the registry — require a plain https URL.</summary>
+    private static bool IsDohTemplate(string? value) =>
+        !string.IsNullOrWhiteSpace(value) &&
+        Uri.TryCreate(value, UriKind.Absolute, out var uri) &&
+        uri.Scheme == Uri.UriSchemeHttps &&
+        value.IndexOfAny([' ', '"', '&', '|', '<', '>', '^']) < 0;
 
     private static bool IsIPv4(string value) =>
         IPAddress.TryParse(value, out var ip) && ip.AddressFamily == AddressFamily.InterNetwork;

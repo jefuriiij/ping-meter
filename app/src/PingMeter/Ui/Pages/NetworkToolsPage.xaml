@@ -143,6 +143,45 @@
                             PlaceholderText="optional" />
                     </Grid>
 
+                    <!--  DNS over HTTPS, per server, mirroring the Windows 11 settings page  -->
+                    <Grid Margin="0,0,0,12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="16" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0">
+                            <TextBlock
+                                Margin="0,0,0,4"
+                                Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                Text="DNS over HTTPS" />
+                            <ComboBox
+                                x:Name="PrimaryDoh"
+                                HorizontalAlignment="Stretch"
+                                SelectionChanged="OnDohChanged" />
+                            <ui:TextBox
+                                x:Name="PrimaryDohTemplate"
+                                Margin="0,6,0,0"
+                                PlaceholderText="https://dns.example.com/dns-query"
+                                Visibility="Collapsed" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="2">
+                            <TextBlock
+                                Margin="0,0,0,4"
+                                Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                Text="DNS over HTTPS" />
+                            <ComboBox
+                                x:Name="SecondaryDoh"
+                                HorizontalAlignment="Stretch"
+                                SelectionChanged="OnDohChanged" />
+                            <ui:TextBox
+                                x:Name="SecondaryDohTemplate"
+                                Margin="0,6,0,0"
+                                PlaceholderText="https://dns.example.com/dns-query"
+                                Visibility="Collapsed" />
+                        </StackPanel>
+                    </Grid>
+
                     <StackPanel Orientation="Horizontal">
                         <ui:Button
                             x:Name="ApplyDnsButton"

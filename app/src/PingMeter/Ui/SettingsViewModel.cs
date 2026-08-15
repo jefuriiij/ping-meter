@@ -130,18 +130,22 @@ internal sealed class SettingsViewModel : INotifyPropertyChanged
 
     public IReadOnlyList<DnsPreset> DnsPresets => _working.DnsPresets;
 
-    /// <summary>Adds or overwrites a saved combination and persists straight away.</summary>
-    public void SaveDnsPreset(string name, string primary, string? secondary)
+    /// <summary>Adds or overwrites a saved combination (with its encryption choices) and persists straight away.</summary>
+    public void SaveDnsPreset(string name, string primary, string? secondary,
+        string? primaryDoh = null, string? primaryTemplate = null,
+        string? secondaryDoh = null, string? secondaryTemplate = null)
     {
         var existing = _working.DnsPresets.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
-        if (existing != null)
+        var preset = existing ?? new DnsPreset { Name = name };
+        preset.Primary = primary;
+        preset.Secondary = secondary;
+        preset.PrimaryDoh = primaryDoh;
+        preset.PrimaryDohTemplate = string.IsNullOrWhiteSpace(primaryTemplate) ? null : primaryTemplate;
+        preset.SecondaryDoh = secondaryDoh;
+        preset.SecondaryDohTemplate = string.IsNullOrWhiteSpace(secondaryTemplate) ? null : secondaryTemplate;
+        if (existing is null)
         {
-            existing.Primary = primary;
-            existing.Secondary = secondary;
-        }
-        else
-        {
-            _working.DnsPresets.Add(new DnsPreset { Name = name, Primary = primary, Secondary = secondary });
+            _working.DnsPresets.Add(preset);
         }
         _working.Normalize();
         DnsPresetsChanged?.Invoke(_working.DnsPresets);

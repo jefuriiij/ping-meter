@@ -532,7 +532,13 @@ internal sealed class SettingsForm : Form
             : $"Setting DNS to {primary}{(secondary != null ? $" / {secondary}" : "")} on {status.AdapterName}…");
         RepairStarted?.Invoke();
 
-        var result = await NetworkRepair.RunSetDnsAsync(status.InterfaceIndex, primary, secondary);
+        // No DoH controls in this dialog: pass null so existing encryption settings survive.
+        var result = await NetworkRepair.RunSetDnsAsync(new DnsRequest(
+            status.InterfaceIndex,
+            status.AdapterId,
+            automatic,
+            primary is null ? null : new DnsServerRequest(primary, null, null),
+            secondary is null ? null : new DnsServerRequest(secondary, null, null)));
 
         string logSummary = result.Outcome switch
         {

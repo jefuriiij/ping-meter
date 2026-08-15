@@ -16,6 +16,13 @@ public sealed class DnsPreset
     public string Name { get; set; } = "";
     public string Primary { get; set; } = "";
     public string? Secondary { get; set; }
+
+    // Encryption choices travel with the preset. Stored as text ("Off"/"Automatic"/"Manual")
+    // and nullable, so settings.json files written before this existed still load.
+    public string? PrimaryDoh { get; set; }
+    public string? PrimaryDohTemplate { get; set; }
+    public string? SecondaryDoh { get; set; }
+    public string? SecondaryDohTemplate { get; set; }
 }
 
 public sealed class AppConfig
@@ -78,6 +85,10 @@ public sealed class AppConfig
                 Name = p.Name.Trim(),
                 Primary = p.Primary.Trim(),
                 Secondary = IsIPv4(p.Secondary) ? p.Secondary!.Trim() : null,
+                PrimaryDoh = p.PrimaryDoh,
+                PrimaryDohTemplate = p.PrimaryDohTemplate,
+                SecondaryDoh = p.SecondaryDoh,
+                SecondaryDohTemplate = p.SecondaryDohTemplate,
             })
             .GroupBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
             .Select(g => g.First())
@@ -99,7 +110,16 @@ public sealed class AppConfig
     }
 
     private static List<DnsPreset> ClonePresets(IEnumerable<DnsPreset> presets) =>
-        presets.Select(p => new DnsPreset { Name = p.Name, Primary = p.Primary, Secondary = p.Secondary }).ToList();
+        presets.Select(p => new DnsPreset
+        {
+            Name = p.Name,
+            Primary = p.Primary,
+            Secondary = p.Secondary,
+            PrimaryDoh = p.PrimaryDoh,
+            PrimaryDohTemplate = p.PrimaryDohTemplate,
+            SecondaryDoh = p.SecondaryDoh,
+            SecondaryDohTemplate = p.SecondaryDohTemplate,
+        }).ToList();
 
     public void CopyFrom(AppConfig other)
     {
