@@ -3,9 +3,16 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
-    Title="General">
+    Title="General"
+    TextElement.Foreground="{DynamicResource TextFillColorPrimaryBrush}">
 
-    <ScrollViewer VerticalScrollBarVisibility="Auto">
+    <!--  PreviewMouseWheel: without it the wheel only works over the scrollbar itself,
+          and child controls (the target list) swallow it entirely.  -->
+    <ScrollViewer
+        x:Name="PageScroll"
+        HorizontalScrollBarVisibility="Disabled"
+        PreviewMouseWheel="OnPreviewMouseWheel"
+        VerticalScrollBarVisibility="Auto">
         <StackPanel Margin="24,8,24,24">
 
             <TextBlock
@@ -78,7 +85,7 @@
                 </ui:CardControl.Header>
                 <StackPanel Orientation="Horizontal">
                     <ui:NumberBox
-                        Width="120"
+                        Width="136"
                         ClearButtonEnabled="False"
                         MaxDecimalPlaces="1"
                         Maximum="60"
@@ -112,7 +119,7 @@
                 </ui:CardControl.Header>
                 <StackPanel Orientation="Horizontal">
                     <ui:NumberBox
-                        Width="120"
+                        Width="136"
                         ClearButtonEnabled="False"
                         MaxDecimalPlaces="0"
                         Maximum="5000"
@@ -141,7 +148,7 @@
                 </ui:CardControl.Header>
                 <StackPanel Orientation="Horizontal">
                     <ui:NumberBox
-                        Width="120"
+                        Width="136"
                         ClearButtonEnabled="False"
                         MaxDecimalPlaces="0"
                         Maximum="10000"

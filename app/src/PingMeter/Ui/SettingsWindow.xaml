@@ -29,6 +29,8 @@
         <ui:NavigationView
             x:Name="Navigation"
             Grid.Row="1"
+            BorderThickness="0"
+            FrameMargin="0"
             IsBackButtonVisible="Collapsed"
             IsPaneToggleVisible="False"
             OpenPaneLength="190"
