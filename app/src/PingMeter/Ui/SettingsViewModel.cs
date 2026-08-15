@@ -66,6 +66,63 @@ internal sealed class SettingsViewModel : INotifyPropertyChanged
         set => SetConfig(v => _working.StartWithWindows = v, value, _working.StartWithWindows);
     }
 
+    // ---- Advanced ----
+
+    public double TimeoutSeconds
+    {
+        get => _working.TimeoutMs / 1000d;
+        set => SetConfig(v => _working.TimeoutMs = (int)Math.Round(v * 1000), value, _working.TimeoutMs / 1000d);
+    }
+
+    public double StatsWindow
+    {
+        get => _working.StatsWindow;
+        set => SetConfig(v => _working.StatsWindow = (int)v, value, _working.StatsWindow);
+    }
+
+    /// <summary>Index into the "Where to show" list; maps to <see cref="MonitorSelection"/>.</summary>
+    public int MonitorIndex
+    {
+        get => (int)_working.Monitors;
+        set => SetConfig(v => _working.Monitors = (MonitorSelection)v, value, (int)_working.Monitors);
+    }
+
+    public double HorizontalOffsetPx
+    {
+        get => _working.HorizontalOffsetPx;
+        set => SetConfig(v => _working.HorizontalOffsetPx = (int)v, value, _working.HorizontalOffsetPx);
+    }
+
+    public bool TransparentBackground
+    {
+        get => _working.TransparentBackground;
+        set => SetConfig(v => _working.TransparentBackground = v, value, _working.TransparentBackground);
+    }
+
+    public bool AutoCheckUpdates
+    {
+        get => _working.AutoCheckUpdates;
+        set => SetConfig(v => _working.AutoCheckUpdates = v, value, _working.AutoCheckUpdates);
+    }
+
+    public bool EventLogEnabled
+    {
+        get => _working.EventLogEnabled;
+        set => SetConfig(v => _working.EventLogEnabled = v, value, _working.EventLogEnabled);
+    }
+
+    public bool SampleCsvEnabled
+    {
+        get => _working.SampleCsvEnabled;
+        set => SetConfig(v => _working.SampleCsvEnabled = v, value, _working.SampleCsvEnabled);
+    }
+
+    public double LogRetentionDays
+    {
+        get => _working.LogRetentionDays;
+        set => SetConfig(v => _working.LogRetentionDays = (int)v, value, _working.LogRetentionDays);
+    }
+
     public void AddTarget()
     {
         string host = NewTarget.Trim();

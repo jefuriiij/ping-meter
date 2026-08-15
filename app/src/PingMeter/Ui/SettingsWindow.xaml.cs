@@ -32,9 +32,12 @@ public partial class SettingsWindow : FluentWindow
         // before PageHost exists; the constructor sets the first page itself.
         if (PageHost is null || NavList.SelectedItem is not ListBoxItem item)
             return;
-        PageHost.Content = item.Tag as string == "general"
-            ? new GeneralPage { DataContext = _viewModel }
-            : new PlaceholderPage();
+        PageHost.Content = (item.Tag as string) switch
+        {
+            "general" => new GeneralPage { DataContext = _viewModel },
+            "advanced" => new AdvancedPage { DataContext = _viewModel },
+            _ => new PlaceholderPage(),
+        };
     }
 
     /// <summary>

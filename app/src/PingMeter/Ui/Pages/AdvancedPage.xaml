@@ -1,0 +1,215 @@
+<UserControl
+    x:Class="PingMeter.Ui.Pages.AdvancedPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+    TextElement.Foreground="{DynamicResource TextFillColorPrimaryBrush}">
+
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="24,8,24,24">
+
+            <TextBlock
+                Margin="0,0,0,4"
+                FontSize="20"
+                FontWeight="SemiBold"
+                Text="Advanced" />
+            <TextBlock
+                Margin="0,0,0,20"
+                Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                Text="Fine-tuning you rarely need to change." />
+
+            <TextBlock
+                Margin="0,0,0,8"
+                FontWeight="SemiBold"
+                Text="Connection" />
+
+            <ui:CardControl Margin="0,0,0,8" Icon="{ui:SymbolIcon Clock24}">
+                <ui:CardControl.Header>
+                    <StackPanel>
+                        <TextBlock FontWeight="SemiBold" Text="Give up after" />
+                        <TextBlock
+                            TextWrapping="Wrap"
+                            Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                            Text="No reply within this time counts as a lost ping — shown as red T/O." />
+                    </StackPanel>
+                </ui:CardControl.Header>
+                <StackPanel Orientation="Horizontal">
+                    <ui:NumberBox
+                        Width="136"
+                        ClearButtonEnabled="False"
+                        MaxDecimalPlaces="1"
+                        Maximum="10"
+                        Minimum="0.1"
+                        SmallChange="0.5"
+                        Value="{Binding TimeoutSeconds, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    <TextBlock
+                        Margin="8,0,0,0"
+                        VerticalAlignment="Center"
+                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                        Text="seconds" />
+                </StackPanel>
+            </ui:CardControl>
+
+            <ui:CardControl Margin="0,0,0,8" Icon="{ui:SymbolIcon DataTrending24}">
+                <ui:CardControl.Header>
+                    <StackPanel>
+                        <TextBlock FontWeight="SemiBold" Text="Statistics period" />
+                        <TextBlock
+                            TextWrapping="Wrap"
+                            Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                            Text="Min / avg / max and loss % in the hover tooltip use this many recent pings." />
+                    </StackPanel>
+                </ui:CardControl.Header>
+                <StackPanel Orientation="Horizontal">
+                    <ui:NumberBox
+                        Width="136"
+                        ClearButtonEnabled="False"
+                        MaxDecimalPlaces="0"
+                        Maximum="600"
+                        Minimum="10"
+                        SmallChange="10"
+                        Value="{Binding StatsWindow, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    <TextBlock
+                        Margin="8,0,0,0"
+                        VerticalAlignment="Center"
+                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                        Text="pings" />
+                </StackPanel>
+            </ui:CardControl>
+
+            <TextBlock
+                Margin="0,20,0,8"
+                FontWeight="SemiBold"
+                Text="Placement" />
+
+            <ui:CardControl Margin="0,0,0,8" Icon="{ui:SymbolIcon Desktop24}">
+                <ui:CardControl.Header>
+                    <StackPanel>
+                        <TextBlock FontWeight="SemiBold" Text="Where to show" />
+                        <TextBlock
+                            TextWrapping="Wrap"
+                            Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                            Text="Which taskbar(s) get the ping display." />
+                    </StackPanel>
+                </ui:CardControl.Header>
+                <ComboBox Width="190" SelectedIndex="{Binding MonitorIndex, Mode=TwoWay}">
+                    <ComboBoxItem Content="Main screen only" />
+                    <ComboBoxItem Content="Second screen(s) only" />
+                    <ComboBoxItem Content="Every screen" />
+                </ComboBox>
+            </ui:CardControl>
+
+            <ui:CardControl Margin="0,0,0,8" Icon="{ui:SymbolIcon ArrowLeft24}">
+                <ui:CardControl.Header>
+                    <StackPanel>
+                        <TextBlock FontWeight="SemiBold" Text="Move left" />
+                        <TextBlock
+                            TextWrapping="Wrap"
+                            Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                            Text="Nudge the display away from the clock. Only needed if something overlaps." />
+                    </StackPanel>
+                </ui:CardControl.Header>
+                <StackPanel Orientation="Horizontal">
+                    <ui:NumberBox
+                        Width="136"
+                        ClearButtonEnabled="False"
+                        MaxDecimalPlaces="0"
+                        Maximum="1000"
+                        Minimum="0"
+                        SmallChange="4"
+                        Value="{Binding HorizontalOffsetPx, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    <TextBlock
+                        Margin="8,0,0,0"
+                        VerticalAlignment="Center"
+                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                        Text="pixels" />
+                </StackPanel>
+            </ui:CardControl>
+
+            <ui:CardControl Margin="0,0,0,8" Icon="{ui:SymbolIcon Eye24}">
+                <ui:CardControl.Header>
+                    <StackPanel>
+                        <TextBlock FontWeight="SemiBold" Text="See-through background" />
+                        <TextBlock
+                            TextWrapping="Wrap"
+                            Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                            Text="Show just the number, with no dark box behind it." />
+                    </StackPanel>
+                </ui:CardControl.Header>
+                <ui:ToggleSwitch IsChecked="{Binding TransparentBackground, Mode=TwoWay}" />
+            </ui:CardControl>
+
+            <TextBlock
+                Margin="0,20,0,8"
+                FontWeight="SemiBold"
+                Text="Logging and updates" />
+
+            <ui:CardControl Margin="0,0,0,8" Icon="{ui:SymbolIcon ArrowDownload24}">
+                <ui:CardControl.Header>
+                    <StackPanel>
+                        <TextBlock FontWeight="SemiBold" Text="Tell me when a new version is available" />
+                        <TextBlock
+                            TextWrapping="Wrap"
+                            Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                            Text="Checks quietly once a day; you can also check anytime from the right-click menu." />
+                    </StackPanel>
+                </ui:CardControl.Header>
+                <ui:ToggleSwitch IsChecked="{Binding AutoCheckUpdates, Mode=TwoWay}" />
+            </ui:CardControl>
+
+            <ui:CardControl Margin="0,0,0,8" Icon="{ui:SymbolIcon Notebook24}">
+                <ui:CardControl.Header>
+                    <StackPanel>
+                        <TextBlock FontWeight="SemiBold" Text="Keep a diary of connection problems" />
+                        <TextBlock
+                            TextWrapping="Wrap"
+                            Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                            Text="Timeouts, slow spells and hourly summaries — open via 'View connection log'." />
+                    </StackPanel>
+                </ui:CardControl.Header>
+                <ui:ToggleSwitch IsChecked="{Binding EventLogEnabled, Mode=TwoWay}" />
+            </ui:CardControl>
+
+            <ui:CardControl Margin="0,0,0,8" Icon="{ui:SymbolIcon DocumentTable24}">
+                <ui:CardControl.Header>
+                    <StackPanel>
+                        <TextBlock FontWeight="SemiBold" Text="Also record every single ping (CSV file)" />
+                        <TextBlock
+                            TextWrapping="Wrap"
+                            Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                            Text="Spreadsheet-style data for graphing — about 3.5 MB per day." />
+                    </StackPanel>
+                </ui:CardControl.Header>
+                <ui:ToggleSwitch IsChecked="{Binding SampleCsvEnabled, Mode=TwoWay}" />
+            </ui:CardControl>
+
+            <ui:CardControl Icon="{ui:SymbolIcon Delete24}">
+                <ui:CardControl.Header>
+                    <StackPanel>
+                        <TextBlock FontWeight="SemiBold" Text="Delete logs older than" />
+                        <TextBlock
+                            TextWrapping="Wrap"
+                            Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                            Text="Old log files are removed automatically to save disk space." />
+                    </StackPanel>
+                </ui:CardControl.Header>
+                <StackPanel Orientation="Horizontal">
+                    <ui:NumberBox
+                        Width="136"
+                        ClearButtonEnabled="False"
+                        MaxDecimalPlaces="0"
+                        Maximum="365"
+                        Minimum="1"
+                        SmallChange="5"
+                        Value="{Binding LogRetentionDays, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    <TextBlock
+                        Margin="8,0,0,0"
+                        VerticalAlignment="Center"
+                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                        Text="days" />
+                </StackPanel>
+            </ui:CardControl>
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>
