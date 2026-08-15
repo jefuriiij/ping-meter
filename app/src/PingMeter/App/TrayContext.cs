@@ -424,6 +424,9 @@ internal sealed class TrayContext : ApplicationContext
                 ConfigStore.Save(_config);
             };
             _fluentSettings.Closed += (_, _) => _fluentSettings = null;
+            // WinForms owns the message loop, so a modeless WPF window gets no keyboard
+            // messages without this — every text box silently ignores typing.
+            System.Windows.Forms.Integration.ElementHost.EnableModelessKeyboardInterop(_fluentSettings);
             _fluentSettings.Show();
             _fluentSettings.SelectPage(page);
             _fluentSettings.Activate();
