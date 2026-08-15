@@ -1,9 +1,8 @@
-<Page
+<UserControl
     x:Class="PingMeter.Ui.Pages.PlaceholderPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
-    Title="Coming soon"
     TextElement.Foreground="{DynamicResource TextFillColorPrimaryBrush}">
 
     <StackPanel
@@ -27,4 +26,4 @@
             Text="This section still lives in the classic settings window."
             TextWrapping="Wrap" />
     </StackPanel>
-</Page>
+</UserControl>

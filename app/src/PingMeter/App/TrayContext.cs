@@ -404,16 +404,28 @@ internal sealed class TrayContext : ApplicationContext
 
     private void OpenFluentSettings()
     {
-        if (_fluentSettings is { IsLoaded: true })
+        try
         {
+            if (_fluentSettings is { IsLoaded: true })
+            {
+                _fluentSettings.Activate();
+                return;
+            }
+            WpfHost.EnsureInitialized();
+            _fluentSettings = new SettingsWindow(_config);
+            _fluentSettings.ConfigSaved += ApplySettings;
+            _fluentSettings.Closed += (_, _) => _fluentSettings = null;
+            _fluentSettings.Show();
             _fluentSettings.Activate();
-            return;
         }
-        WpfHost.EnsureInitialized();
-        _fluentSettings = new SettingsWindow(_config);
-        _fluentSettings.ConfigSaved += ApplySettings;
-        _fluentSettings.Closed += (_, _) => _fluentSettings = null;
-        _fluentSettings.Show();
+        catch (Exception ex)
+        {
+            // A broken settings window must not take the tray app down with it.
+            _fluentSettings = null;
+            _eventLog.Warn($"new settings window failed: {ex}");
+            MessageBox.Show($"Couldn't open the new settings window:\n\n{ex.Message}",
+                "PingMeter", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
     }
 
     private void OnRepairStarted()

@@ -4,7 +4,7 @@ using System.Windows.Controls;
 namespace PingMeter.Ui.Pages;
 
 // public: the XAML-generated half of the partial class is public.
-public partial class GeneralPage : Page
+public partial class GeneralPage : System.Windows.Controls.UserControl
 {
     private SettingsViewModel? ViewModel => DataContext as SettingsViewModel;
 

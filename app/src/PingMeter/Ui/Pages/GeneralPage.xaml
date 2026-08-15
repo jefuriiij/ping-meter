@@ -1,9 +1,10 @@
-<Page
+<!--  UserControl, not Page: a Page may only live in a Window or Frame, and this is
+      hosted in a ContentControl.  -->
+<UserControl
     x:Class="PingMeter.Ui.Pages.GeneralPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
-    Title="General"
     TextElement.Foreground="{DynamicResource TextFillColorPrimaryBrush}">
 
     <ScrollViewer
@@ -207,4 +208,4 @@
 
         </StackPanel>
     </ScrollViewer>
-</Page>
+</UserControl>
