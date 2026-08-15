@@ -3,7 +3,10 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows</TargetFramework>
+    <!-- WinForms for the taskbar widget/tray (needs a raw reparentable HWND);
+         WPF only for the settings window. Both live in the same process. -->
     <UseWindowsForms>true</UseWindowsForms>
+    <UseWPF>true</UseWPF>
     <!-- WinForms dark color mode is still marked experimental (WFO5001) -->
     <NoWarn>$(NoWarn);WFO5001</NoWarn>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -15,5 +18,15 @@
     <Version>0.4.1</Version>
     <Description>Taskbar-embedded ping monitor</Description>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Enabling UseWPF drops System.IO from the implicit usings the WinForms-only
+         build had; restore it so the existing file/logging code keeps compiling. -->
+    <Using Include="System.IO" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="WPF-UI" Version="4.3.0" />
+  </ItemGroup>
 
 </Project>

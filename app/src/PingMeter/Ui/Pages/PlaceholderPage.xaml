@@ -1,0 +1,29 @@
+<Page
+    x:Class="PingMeter.Ui.Pages.PlaceholderPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+    Title="Coming soon">
+
+    <StackPanel
+        Margin="24"
+        HorizontalAlignment="Center"
+        VerticalAlignment="Center">
+        <ui:SymbolIcon
+            HorizontalAlignment="Center"
+            FontSize="48"
+            Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+            Symbol="Beaker24" />
+        <TextBlock
+            Margin="0,16,0,4"
+            HorizontalAlignment="Center"
+            FontSize="18"
+            FontWeight="SemiBold"
+            Text="Not ported yet" />
+        <TextBlock
+            HorizontalAlignment="Center"
+            Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+            Text="This section still lives in the classic settings window."
+            TextWrapping="Wrap" />
+    </StackPanel>
+</Page>

@@ -6,6 +6,7 @@ using PingMeter.Network;
 using PingMeter.Ping;
 using PingMeter.Settings;
 using PingMeter.Taskbar;
+using PingMeter.Ui;
 using PingMeter.Update;
 using PingMeter.Widget;
 
@@ -39,6 +40,7 @@ internal sealed class TrayContext : ApplicationContext
     private DnsStatus? _dnsStatus;
     private StatusBucket _iconBucket = (StatusBucket)(-1);
     private SettingsForm? _settingsForm;
+    private SettingsWindow? _fluentSettings;
     private int _lastTaskbarCount = -1;
     private string? _pendingUpdateUrl;
     private DateTime _lastSweepDate = DateTime.Now.Date;
@@ -190,6 +192,12 @@ internal sealed class TrayContext : ApplicationContext
         var settings = new ToolStripMenuItem("Settings…");
         settings.Click += (_, _) => OpenSettings();
         _menu.Items.Add(settings);
+
+        // Prototype of the WPF/Fluent settings window — runs alongside the classic dialog
+        // for comparison; the classic one goes away once every page is ported.
+        var newSettings = new ToolStripMenuItem("Settings (new UI)…");
+        newSettings.Click += (_, _) => OpenFluentSettings();
+        _menu.Items.Add(newSettings);
 
         _menu.Items.Add(new ToolStripSeparator());
         var exit = new ToolStripMenuItem("Exit");
@@ -392,6 +400,20 @@ internal sealed class TrayContext : ApplicationContext
         if (tab is { } index)
             _settingsForm.SelectTab(index);
         _settingsForm.Show();
+    }
+
+    private void OpenFluentSettings()
+    {
+        if (_fluentSettings is { IsLoaded: true })
+        {
+            _fluentSettings.Activate();
+            return;
+        }
+        WpfHost.EnsureInitialized();
+        _fluentSettings = new SettingsWindow(_config);
+        _fluentSettings.ConfigSaved += ApplySettings;
+        _fluentSettings.Closed += (_, _) => _fluentSettings = null;
+        _fluentSettings.Show();
     }
 
     private void OnRepairStarted()
