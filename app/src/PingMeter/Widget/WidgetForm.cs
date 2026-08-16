@@ -12,8 +12,8 @@ namespace PingMeter.Widget;
 /// </summary>
 internal sealed class WidgetForm : Form
 {
-    // Colorkey for the layered window. Never pure black (0x000000) — a black
-    // colorkey breaks dark-mode context menus on the Win11 taskbar.
+    // Colorkey for the layered window. Never pure black (0x000000) — a black colorkey
+    // breaks dark-mode context menus on the Win11 taskbar.
     private static readonly Color KeyColor = Color.FromArgb(1, 0, 1);
 
     private static readonly Color GoodColor = Color.FromArgb(102, 187, 106);

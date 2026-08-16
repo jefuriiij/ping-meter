@@ -71,7 +71,7 @@ dotnet publish src/PingMeter -c Release -r win-x64 --self-contained false /p:Pub
 
 ## Notes
 
-- Stack: C# / .NET 10 — WinForms for the taskbar widget and tray, WPF ([WPF-UI](https://github.com/lepoco/wpfui)) for the Fluent settings window. The taskbar-embedding technique (`SetParent` into `Shell_TrayWnd` / `Shell_SecondaryTrayWnd`) keeps the widget next to the tray clock.
+- Stack: C# / .NET 10 — WinForms for the taskbar widget and tray, WPF ([WPF-UI](https://github.com/lepoco/wpfui)) for the Fluent settings window. The widget lives in the taskbar by reparenting its window (`SetParent`) into `Shell_TrayWnd` / `Shell_SecondaryTrayWnd`.
 - Windows could break this in a future taskbar rewrite — if embedding ever fails, the widget falls back to floating above the taskbar and keeps retrying.
 - Designed for the Windows 11 XAML taskbar. On a classic (Windows 10 / ExplorerPatcher) taskbar the widget still shows, but may overlap task buttons on a very full taskbar.
 - In see-through mode, clicks land only on the visible pixels (the number and graph); the tray icon always works as a fallback.

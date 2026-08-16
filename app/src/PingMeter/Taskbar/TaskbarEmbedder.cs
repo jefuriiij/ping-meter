@@ -124,18 +124,18 @@ internal sealed class TaskbarEmbedder : IDisposable
 
         int barHeight = rcTaskbar.Height;
         // On Win11 22H2+ touch devices Shell_TrayWnd is taller than the visible bar; the
-        // Start button height tracks the visible part, so measure against that.
+        // Start button height tracks the visible part, so measure against that instead.
         int visibleHeight = rcStart.Height > 0 && rcStart.Height <= barHeight ? rcStart.Height : barHeight;
 
         var size = Widget.ComputeSize(visibleHeight);
 
         // Sit immediately left of the tray area. Win11 secondary taskbars have no
-        // TrayNotifyWnd — reserve ~88 DIP for the clock instead.
+        // TrayNotifyWnd, so reserve ~88 DIP for the clock instead.
         int notifyX = rcNotify.Width > 0
             ? rcNotify.Left - rcTaskbar.Left
             : rcTaskbar.Width - Dpi(88);
-        // Other taskbar-injected widgets claim the same spot —
-        // anchor left of the leftmost one instead of stacking on top of it.
+        // Other taskbar-injected widgets claim the same spot — anchor left of the
+        // leftmost one instead of stacking on top of it.
         int anchorX = Math.Min(notifyX, foreignLeft);
         int x = anchorX - size.Width - Dpi(4) - Dpi(_config.HorizontalOffsetPx);
         int y = (visibleHeight - size.Height) / 2 + (barHeight - visibleHeight);
@@ -155,8 +155,8 @@ internal sealed class TaskbarEmbedder : IDisposable
 
     /// <summary>
     /// Leftmost X (taskbar-relative) of any other injected widget in the taskbar's right
-    /// region, or int.MaxValue when there is none. Injected widgets
-    /// are popup-style windows reparented into the taskbar — genuine shell elements have
+    /// region, or int.MaxValue when there is none. Injected widgets are popup-style
+    /// windows reparented into the taskbar — genuine shell elements have
     /// WS_CHILD, so the style bit cleanly separates the two.
     /// </summary>
     private int FindLeftmostInjectedWidgetX(NativeMethods.RECT rcTaskbar)
