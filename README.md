@@ -19,7 +19,7 @@ Or download `PingMeter.exe` from the [latest release](https://github.com/jefurii
 - **Taskbar-embedded widget** next to the tray clock — on the primary taskbar, secondary-monitor taskbar(s), or all of them. It moves out of the way of other taskbar widgets automatically.
 - **Color-coded latency** (defaults: green < 50 ms, yellow < 120 ms, red above; timeouts show `T/O`).
 - **Sparkline** of the recent pings; lost pings draw as full-height red bars.
-- **Packet loss** — a red percentage appears next to the number whenever recent pings go missing, and disappears when the connection is clean.
+- **Packet loss** — a red percentage appears on a second line under the number whenever recent pings go missing, and disappears when the connection is clean. The widget keeps the same width either way, so nothing else in the taskbar shifts.
 - **Preset targets with quick switch** — right-click to jump between google.com, 1.1.1.1, facebook.com, or any host you add.
 - **Hover tooltip** with current / min / avg / max, loss for the recent window *and* since reset, plus the DNS servers currently in use.
 - **Network event log** — timeouts, latency spikes, recoveries and hourly summaries in daily log files, so you can check after the fact whether the connection was unstable. Optional raw per-ping CSV for graphing.
