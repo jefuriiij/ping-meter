@@ -32,6 +32,7 @@ internal sealed class WidgetForm : Form
     private bool _lossVisible;
     private uint _dpi = 96;
     private Font _font;
+    private Font _lossFont;
     private string _tooltipText = "PingMeter";
 
     /// <summary>Set when size-affecting config changed; the embedder repositions on next tick.</summary>
@@ -52,6 +53,7 @@ internal sealed class WidgetForm : Form
         BackColor = KeyColor;
         ContextMenuStrip = menu;
         _font = CreateFont();
+        _lossFont = CreateLossFont();
         DoubleClick += (_, _) => SettingsRequested?.Invoke();
         _hoverTimer.Tick += (_, _) => HoverTick();
         _hoverTimer.Start();
@@ -112,7 +114,9 @@ internal sealed class WidgetForm : Form
             return;
         _dpi = dpi;
         _font.Dispose();
+        _lossFont.Dispose();
         _font = CreateFont();
+        _lossFont = CreateLossFont();
         LayoutDirty = true;
         Invalidate();
     }
@@ -128,12 +132,9 @@ internal sealed class WidgetForm : Form
         _snapshot = snapshot;
         _paused = paused;
         _tooltipText = BuildTooltip(snapshot, paused, target, dnsSummary);
-        bool lossVisible = _config.ShowLossOnWidget && !paused && snapshot.LossPercent > 0;
-        if (lossVisible != _lossVisible)
-        {
-            _lossVisible = lossVisible;
-            LayoutDirty = true; // widget width changes; embedder repositions on next tick
-        }
+        // Loss stacks under the reading, so showing or hiding it never changes the
+        // widget's size — no repositioning needed, just a repaint.
+        _lossVisible = _config.ShowLossOnWidget && !paused && snapshot.LossPercent > 0;
         Invalidate();
     }
 
@@ -143,8 +144,6 @@ internal sealed class WidgetForm : Form
         // Reserve for 3 digits so the width doesn't jitter as the ping moves.
         int textWidth = TextRenderer.MeasureText("888 ms", _font).Width;
         int width = Dpi(4) + textWidth + Dpi(4);
-        if (_lossVisible)
-            width += TextRenderer.MeasureText("88%", _font).Width + Dpi(3);
         if (_config.ShowSparkline)
             width += Dpi(36) + Dpi(6);
         return new Size(width, height);
@@ -198,24 +197,6 @@ internal sealed class WidgetForm : Form
             textLeft = sparkRect.Right + Dpi(6);
         }
 
-        // Red loss % at the far right, shown only while the stats window contains lost pings.
-        int rightPad = pad;
-        if (_lossVisible && snapshot != null)
-        {
-            string lossText = $"{Math.Max(1, (int)Math.Round(snapshot.LossPercent))}%";
-            var lossSize = TextRenderer.MeasureText(lossText, _font);
-            using var lossBrush = new SolidBrush(BadColor);
-            using var lossFormat = new StringFormat
-            {
-                Alignment = StringAlignment.Far,
-                LineAlignment = StringAlignment.Center,
-                FormatFlags = StringFormatFlags.NoWrap,
-            };
-            g.DrawString(lossText, _font, lossBrush,
-                new RectangleF(ClientSize.Width - pad - lossSize.Width, 0, lossSize.Width + pad, ClientSize.Height), lossFormat);
-            rightPad = pad + lossSize.Width + Dpi(3);
-        }
-
         using var brush = new SolidBrush(textColor);
         using var format = new StringFormat
         {
@@ -223,8 +204,29 @@ internal sealed class WidgetForm : Form
             LineAlignment = StringAlignment.Center,
             FormatFlags = StringFormatFlags.NoWrap,
         };
-        g.DrawString(text, _font, brush,
-            new RectangleF(textLeft, 0, ClientSize.Width - textLeft - rightPad, ClientSize.Height), format);
+
+        float columnLeft = textLeft;
+        float columnWidth = ClientSize.Width - textLeft - pad;
+
+        // Loss sits on a second line under the reading — the way the taskbar clock stacks
+        // its time and date — so the widget keeps one width whether or not pings are missing.
+        if (_lossVisible && snapshot != null)
+        {
+            string lossText = $"{Math.Max(1, (int)Math.Round(snapshot.LossPercent))}%";
+            int mainHeight = _font.Height;
+            int lossHeight = _lossFont.Height;
+            float top = Math.Max(0f, (ClientSize.Height - mainHeight - lossHeight) / 2f);
+            g.DrawString(text, _font, brush,
+                new RectangleF(columnLeft, top, columnWidth, mainHeight), format);
+            using var lossBrush = new SolidBrush(BadColor);
+            g.DrawString(lossText, _lossFont, lossBrush,
+                new RectangleF(columnLeft, top + mainHeight, columnWidth, lossHeight), format);
+        }
+        else
+        {
+            g.DrawString(text, _font, brush,
+                new RectangleF(columnLeft, 0, columnWidth, ClientSize.Height), format);
+        }
     }
 
     private void DrawSparkline(Graphics g, Rectangle rect, StatsSnapshot? snapshot)
@@ -277,6 +279,9 @@ internal sealed class WidgetForm : Form
 
     private Font CreateFont() => new("Segoe UI", Dpi(13), FontStyle.Regular, GraphicsUnit.Pixel);
 
+    /// <summary>Smaller face for the stacked loss line, so both fit the taskbar's height.</summary>
+    private Font CreateLossFont() => new("Segoe UI", Dpi(10), FontStyle.Regular, GraphicsUnit.Pixel);
+
     private int Dpi(int px) => (int)Math.Round(px * _dpi / 96.0);
 
     private static bool IsLightTheme()
@@ -305,6 +310,7 @@ internal sealed class WidgetForm : Form
             _hoverTimer.Dispose();
             _toolTip.Dispose();
             _font.Dispose();
+            _lossFont.Dispose();
         }
         base.Dispose(disposing);
     }
