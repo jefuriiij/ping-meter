@@ -115,32 +115,33 @@
                         HorizontalAlignment="Stretch"
                         SelectionChanged="OnPresetChanged" />
 
+                    <!--  Columns match the DNS over HTTPS grid below, so the two rows line up  -->
                     <Grid Margin="0,0,0,12">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="16" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock
-                            Grid.Column="0"
-                            Margin="0,0,8,0"
-                            VerticalAlignment="Center"
-                            Text="Main" />
-                        <ui:TextBox
-                            x:Name="DnsPrimary"
-                            Grid.Column="1"
-                            Margin="0,0,16,0"
-                            PlaceholderText="1.1.1.1" />
-                        <TextBlock
-                            Grid.Column="2"
-                            Margin="0,0,8,0"
-                            VerticalAlignment="Center"
-                            Text="Backup" />
-                        <ui:TextBox
-                            x:Name="DnsSecondary"
-                            Grid.Column="3"
-                            PlaceholderText="optional" />
+                        <StackPanel Grid.Column="0">
+                            <TextBlock
+                                Margin="0,0,0,4"
+                                Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                Text="Main" />
+                            <ui:TextBox
+                                x:Name="DnsPrimary"
+                                HorizontalAlignment="Stretch"
+                                PlaceholderText="1.1.1.1" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="2">
+                            <TextBlock
+                                Margin="0,0,0,4"
+                                Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                Text="Backup" />
+                            <ui:TextBox
+                                x:Name="DnsSecondary"
+                                HorizontalAlignment="Stretch"
+                                PlaceholderText="optional" />
+                        </StackPanel>
                     </Grid>
 
                     <!--  DNS over HTTPS, per server, mirroring the Windows 11 settings page  -->
