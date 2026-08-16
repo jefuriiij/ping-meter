@@ -4,7 +4,6 @@ using PingMeter.Config;
 using PingMeter.Logging;
 using PingMeter.Network;
 using PingMeter.Ping;
-using PingMeter.Settings;
 using PingMeter.Taskbar;
 using PingMeter.Ui;
 using PingMeter.Update;
@@ -39,8 +38,7 @@ internal sealed class TrayContext : ApplicationContext
     private readonly System.Windows.Forms.Timer _dnsTimer;
     private DnsStatus? _dnsStatus;
     private StatusBucket _iconBucket = (StatusBucket)(-1);
-    private SettingsForm? _settingsForm;
-    private SettingsWindow? _fluentSettings;
+    private SettingsWindow? _settingsWindow;
     private int _lastTaskbarCount = -1;
     private string? _pendingUpdateUrl;
     private DateTime _lastSweepDate = DateTime.Now.Date;
@@ -172,7 +170,7 @@ internal sealed class TrayContext : ApplicationContext
         _menu.Items.Add(reset);
 
         var fixInternet = new ToolStripMenuItem("Fix internet…");
-        fixInternet.Click += (_, _) => OpenFluentSettings(page: 2); // Network tools
+        fixInternet.Click += (_, _) => OpenSettings(page: 2); // Network tools
         _menu.Items.Add(fixInternet);
 
         _menu.Items.Add(new ToolStripSeparator());
@@ -192,12 +190,6 @@ internal sealed class TrayContext : ApplicationContext
         var settings = new ToolStripMenuItem("Settings…");
         settings.Click += (_, _) => OpenSettings();
         _menu.Items.Add(settings);
-
-        // Prototype of the WPF/Fluent settings window — runs alongside the classic dialog
-        // for comparison; the classic one goes away once every page is ported.
-        var newSettings = new ToolStripMenuItem("Settings (new UI)…");
-        newSettings.Click += (_, _) => OpenFluentSettings();
-        _menu.Items.Add(newSettings);
 
         _menu.Items.Add(new ToolStripSeparator());
         var exit = new ToolStripMenuItem("Exit");
@@ -327,7 +319,7 @@ internal sealed class TrayContext : ApplicationContext
         foreach (var taskbar in taskbars)
         {
             var widget = new WidgetForm(_config, _menu);
-            widget.SettingsRequested += OpenSettings;
+            widget.SettingsRequested += () => OpenSettings();
             var embedder = new TaskbarEmbedder(taskbar, widget, _config);
             embedder.TaskbarLost += _watcher.Trigger;
             _embedders.Add(embedder);
@@ -376,65 +368,40 @@ internal sealed class TrayContext : ApplicationContext
         _tray.Icon = _icons[bucket];
     }
 
-    private void OpenSettings() => OpenSettings(tab: null);
-
-    private void OpenSettings(int? tab)
-    {
-        if (_settingsForm is { IsDisposed: false })
-        {
-            if (tab is { } existing)
-                _settingsForm.SelectTab(existing);
-            _settingsForm.Activate();
-            return;
-        }
-        _settingsForm = new SettingsForm(_config);
-        _settingsForm.ConfigSaved += ApplySettings;
-        _settingsForm.RepairStarted += OnRepairStarted;
-        _settingsForm.RepairCompleted += OnRepairCompleted;
-        _settingsForm.DnsPresetsChanged += presets =>
-        {
-            // Persist immediately: a saved preset must survive closing the dialog with Cancel.
-            _config.DnsPresets = presets.Select(p => new DnsPreset { Name = p.Name, Primary = p.Primary, Secondary = p.Secondary }).ToList();
-            ConfigStore.Save(_config);
-        };
-        if (tab is { } index)
-            _settingsForm.SelectTab(index);
-        _settingsForm.Show();
-    }
-
-    private void OpenFluentSettings(int page = 0)
+    /// <summary>Opens the settings window, optionally on a specific page (2 = Network tools).</summary>
+    private void OpenSettings(int page = 0)
     {
         try
         {
-            if (_fluentSettings is { IsLoaded: true })
+            if (_settingsWindow is { IsLoaded: true })
             {
-                _fluentSettings.SelectPage(page);
-                _fluentSettings.Activate();
+                _settingsWindow.SelectPage(page);
+                _settingsWindow.Activate();
                 return;
             }
             WpfHost.EnsureInitialized();
-            _fluentSettings = new SettingsWindow(_config);
-            _fluentSettings.ConfigSaved += ApplySettings;
-            _fluentSettings.RepairStarted += OnRepairStarted;
-            _fluentSettings.RepairCompleted += OnRepairCompleted;
-            _fluentSettings.DnsPresetsChanged += presets =>
+            _settingsWindow = new SettingsWindow(_config);
+            _settingsWindow.ConfigSaved += ApplySettings;
+            _settingsWindow.RepairStarted += OnRepairStarted;
+            _settingsWindow.RepairCompleted += OnRepairCompleted;
+            _settingsWindow.DnsPresetsChanged += presets =>
             {
                 // Persist immediately: a saved preset must survive closing with Cancel.
                 _config.DnsPresets = presets.Select(p => new DnsPreset { Name = p.Name, Primary = p.Primary, Secondary = p.Secondary }).ToList();
                 ConfigStore.Save(_config);
             };
-            _fluentSettings.Closed += (_, _) => _fluentSettings = null;
+            _settingsWindow.Closed += (_, _) => _settingsWindow = null;
             // WinForms owns the message loop, so a modeless WPF window gets no keyboard
             // messages without this — every text box silently ignores typing.
-            System.Windows.Forms.Integration.ElementHost.EnableModelessKeyboardInterop(_fluentSettings);
-            _fluentSettings.Show();
-            _fluentSettings.SelectPage(page);
-            _fluentSettings.Activate();
+            System.Windows.Forms.Integration.ElementHost.EnableModelessKeyboardInterop(_settingsWindow);
+            _settingsWindow.Show();
+            _settingsWindow.SelectPage(page);
+            _settingsWindow.Activate();
         }
         catch (Exception ex)
         {
             // A broken settings window must not take the tray app down with it.
-            _fluentSettings = null;
+            _settingsWindow = null;
             _eventLog.Warn($"new settings window failed: {ex}");
             MessageBox.Show($"Couldn't open the new settings window:\n\n{ex.Message}",
                 "PingMeter", MessageBoxButtons.OK, MessageBoxIcon.Error);
@@ -550,7 +517,7 @@ internal sealed class TrayContext : ApplicationContext
             embedder.Dispose();
         _embedders.Clear();
         _watcher.Dispose();
-        _settingsForm?.Dispose();
+        _settingsWindow?.Close();
         _tray.Dispose();
         _menu.Dispose();
         foreach (var icon in _icons.Values)

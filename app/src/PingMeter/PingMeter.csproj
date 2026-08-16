@@ -15,7 +15,7 @@
     <AssemblyName>PingMeter</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
-    <Version>0.4.1</Version>
+    <Version>0.5.0</Version>
     <Description>Taskbar-embedded ping monitor</Description>
   </PropertyGroup>
 

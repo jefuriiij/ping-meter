@@ -31,7 +31,7 @@ Or download `PingMeter.exe` from the [latest release](https://github.com/jefurii
 
 - **Right-click** the widget (or the tray icon): switch target · Pause · Reset (clear stats and start fresh) · Fix internet… · View connection log · Open logs folder · Check for updates · Settings · Exit.
 - **Double-click** either one: open Settings.
-- Settings live in **General** (targets, ping interval, colors, mini graph, autostart), **Advanced** (timeout, statistics period, which screens, see-through mode, logging, updates) and **Network tools**. Every option has a plain-English explanation under it and a longer tooltip on hover.
+- Settings open in a Windows 11 Fluent window with three pages: **General** (targets, ping interval, colors, mini graph, autostart), **Advanced** (timeout, statistics period, which screens, see-through mode, logging, updates) and **Network tools**. Every option has a plain-English explanation under it and a longer tooltip on hover.
 - Settings are stored at `%APPDATA%\PingMeter\settings.json`.
 
 ## Network tools
@@ -41,6 +41,8 @@ Everything here is optional, started by you, and prompts for Windows permission 
 - **Quick fix — clear DNS cache**: `ipconfig /flushdns`. Instant, no admin prompt, fixes most "website not found" problems.
 - **Full reset — rebuild the connection**: the classic sequence (flush DNS → release IP → renew IP → reset Winsock → reset TCP/IP), with a live progress bar, a per-step ✓/✗ activity log, and a restart countdown you can cancel. Steps that only take effect after a reboot say so explicitly.
 - **DNS server**: shows the active adapter's current IPv4 DNS, and switches it between *Automatic (from your router)*, Cloudflare, Google, Quad9, or addresses you type. Switching back to Automatic undoes everything.
+- **DNS over HTTPS**: per-server encryption, with the same three choices Windows 11 offers — *Off*, *On (automatic template)*, and *On (manual template)* for a URL you supply. Leave it alone and PingMeter won't touch your existing encryption settings.
+- **Save your own combinations**: name a DNS pair (with its encryption choices) and it joins the dropdown for one-click reuse later.
 
 ## Logs
 
@@ -69,7 +71,7 @@ dotnet publish src/PingMeter -c Release -r win-x64 --self-contained false /p:Pub
 
 ## Notes
 
-- Stack: C# / .NET 10 WinForms. The taskbar-embedding technique (`SetParent` into `Shell_TrayWnd` / `Shell_SecondaryTrayWnd`) keeps the widget next to the tray clock.
+- Stack: C# / .NET 10 — WinForms for the taskbar widget and tray, WPF ([WPF-UI](https://github.com/lepoco/wpfui)) for the Fluent settings window. The taskbar-embedding technique (`SetParent` into `Shell_TrayWnd` / `Shell_SecondaryTrayWnd`) keeps the widget next to the tray clock.
 - Windows could break this in a future taskbar rewrite — if embedding ever fails, the widget falls back to floating above the taskbar and keeps retrying.
 - Designed for the Windows 11 XAML taskbar. On a classic (Windows 10 / ExplorerPatcher) taskbar the widget still shows, but may overlap task buttons on a very full taskbar.
 - In see-through mode, clicks land only on the visible pixels (the number and graph); the tray icon always works as a fallback.
