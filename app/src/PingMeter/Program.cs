@@ -20,6 +20,11 @@ internal static class Program
             NetworkRepair.RunSetDnsHelper(args);
             return;
         }
+        if (args.Length > 0 && args[0] == NetworkRepair.FlushDnsArgument)
+        {
+            NetworkRepair.RunFlushDnsHelper();
+            return;
+        }
 
         using var mutex = new Mutex(initiallyOwned: true, @"Local\PingMeter_SingleInstance", out bool createdNew);
         if (!createdNew)

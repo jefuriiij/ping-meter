@@ -54,6 +54,7 @@ internal static class NetworkRepair
 {
     public const string HelperArgument = "--network-repair";
     public const string SetDnsArgument = "--set-dns";
+    public const string FlushDnsArgument = "--flush-dns";
 
     private static readonly string ResultFile = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "PingMeter", "repair-result.json");
@@ -75,15 +76,24 @@ internal static class NetworkRepair
         new("Reset TCP/IP stack", "netsh.exe", "int ip reset", true),
     ];
 
-    /// <summary>Flush DNS only — safe, instant, works without elevation.</summary>
+    /// <summary>
+    /// Flush DNS only. Tries unelevated first; newer Windows builds refuse that ("The requested
+    /// operation requires elevation", exit 1), so on failure it retries through the elevated helper.
+    /// The dnsapi DnsFlushResolverCache call and Clear-DnsClientCache are no way round this: on
+    /// those builds they report success unelevated but leave the cache untouched.
+    /// </summary>
     public static async Task<RepairResult> RunQuickFixAsync()
     {
         int exitCode = await Task.Run(() => RunCommand("ipconfig.exe", "/flushdns", TimeSpan.FromSeconds(30)));
-        var step = new RepairStepResult("Clear DNS cache", exitCode, exitCode == 0, RequiresRestart: false);
-        return exitCode == 0
-            ? new RepairResult(RepairOutcome.Success, [step], null)
-            : new RepairResult(RepairOutcome.Failed, [step], $"ipconfig /flushdns exited with code {exitCode}");
+        if (exitCode == 0)
+            return new RepairResult(RepairOutcome.Success, [new RepairStepResult("Clear DNS cache", 0, true, false)], null);
+
+        return await RunHelperAsync(FlushDnsArgument, "The DNS helper");
     }
+
+    /// <summary>Elevated child entry for "--flush-dns".</summary>
+    public static void RunFlushDnsHelper() =>
+        WriteResults([RunStep("Clear DNS cache", "ipconfig.exe", "/flushdns")]);
 
     /// <summary>Relaunch this exe elevated (UAC prompt) to run all five steps; await its JSON result.</summary>
     public static async Task<RepairResult> RunFullResetAsync(IProgress<RepairProgress>? progress = null)
@@ -148,7 +158,19 @@ internal static class NetworkRepair
         }
 
         string payload = Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(request));
-        string arguments = $"{SetDnsArgument} {payload}";
+        return await RunHelperAsync($"{SetDnsArgument} {payload}", "The DNS helper");
+    }
+
+    /// <summary>Relaunch this exe elevated with <paramref name="arguments"/>; await its JSON result.</summary>
+    private static async Task<RepairResult> RunHelperAsync(string arguments, string helperName)
+    {
+        try
+        {
+            File.Delete(ResultFile);
+        }
+        catch
+        {
+        }
 
         Process helper;
         try
@@ -172,7 +194,7 @@ internal static class NetworkRepair
         {
             Task done = helper.WaitForExitAsync();
             if (await Task.WhenAny(done, Task.Delay(TimeSpan.FromMinutes(2))) != done)
-                return new RepairResult(RepairOutcome.Failed, [], "The DNS helper did not finish within 2 minutes.");
+                return new RepairResult(RepairOutcome.Failed, [], $"{helperName} did not finish within 2 minutes.");
         }
         return ReadResultFile();
     }
