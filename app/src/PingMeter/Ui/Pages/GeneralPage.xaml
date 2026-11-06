@@ -57,13 +57,19 @@
                         ItemsSource="{Binding Targets}" />
 
                     <Grid Margin="0,12,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
                         <TextBlock
+                            Margin="0,0,12,0"
                             VerticalAlignment="Center"
                             Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                             Text="Switch the active one from the right-click menu."
                             TextWrapping="Wrap" />
                         <ui:Button
-                            HorizontalAlignment="Right"
+                            Grid.Column="1"
+                            VerticalAlignment="Center"
                             Click="OnRemoveTarget"
                             Content="Remove"
                             Icon="{ui:SymbolIcon Delete24}" />
@@ -75,7 +81,7 @@
             <ui:CardControl Margin="0,0,0,8" Icon="{ui:SymbolIcon Timer24}">
                 <ui:CardControl.Header>
                     <StackPanel>
-                        <TextBlock FontWeight="SemiBold" Text="Ping every" />
+                        <TextBlock FontWeight="SemiBold" TextWrapping="Wrap" Text="Ping every" />
                         <TextBlock
                             TextWrapping="Wrap"
                             Foreground="{DynamicResource TextFillColorSecondaryBrush}"
@@ -110,7 +116,7 @@
                 </ui:CardControl.Icon>
                 <ui:CardControl.Header>
                     <StackPanel>
-                        <TextBlock FontWeight="SemiBold" Text="Green — fast" />
+                        <TextBlock FontWeight="SemiBold" TextWrapping="Wrap" Text="Green (fast)" />
                         <TextBlock
                             TextWrapping="Wrap"
                             Foreground="{DynamicResource TextFillColorSecondaryBrush}"
@@ -140,7 +146,7 @@
                 </ui:CardControl.Icon>
                 <ui:CardControl.Header>
                     <StackPanel>
-                        <TextBlock FontWeight="SemiBold" Text="Yellow — okay" />
+                        <TextBlock FontWeight="SemiBold" TextWrapping="Wrap" Text="Yellow (okay)" />
                         <TextBlock
                             TextWrapping="Wrap"
                             Foreground="{DynamicResource TextFillColorSecondaryBrush}"
@@ -172,7 +178,7 @@
             <ui:CardControl Margin="0,0,0,8" Icon="{ui:SymbolIcon DataHistogram24}">
                 <ui:CardControl.Header>
                     <StackPanel>
-                        <TextBlock FontWeight="SemiBold" Text="Show mini graph" />
+                        <TextBlock FontWeight="SemiBold" TextWrapping="Wrap" Text="Show mini graph" />
                         <TextBlock
                             TextWrapping="Wrap"
                             Foreground="{DynamicResource TextFillColorSecondaryBrush}"
@@ -185,7 +191,7 @@
             <ui:CardControl Margin="0,0,0,8" Icon="{ui:SymbolIcon ArrowTrendingDown24}">
                 <ui:CardControl.Header>
                     <StackPanel>
-                        <TextBlock FontWeight="SemiBold" Text="Show packet loss %" />
+                        <TextBlock FontWeight="SemiBold" TextWrapping="Wrap" Text="Show packet loss %" />
                         <TextBlock
                             TextWrapping="Wrap"
                             Foreground="{DynamicResource TextFillColorSecondaryBrush}"
@@ -202,7 +208,7 @@
             <ui:CardControl Icon="{ui:SymbolIcon Power24}">
                 <ui:CardControl.Header>
                     <StackPanel>
-                        <TextBlock FontWeight="SemiBold" Text="Start automatically when I turn on my PC" />
+                        <TextBlock FontWeight="SemiBold" TextWrapping="Wrap" Text="Start automatically when I turn on my PC" />
                         <TextBlock
                             TextWrapping="Wrap"
                             Foreground="{DynamicResource TextFillColorSecondaryBrush}"

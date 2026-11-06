@@ -144,7 +144,7 @@ internal sealed class StabilityTracker
         {
             int ok = _count - _lost;
             string stats = ok > 0 ? $"min {_min} / avg {_sum / ok} / max {_max} ms" : "no successful pings";
-            _log.Info($"{target}: hourly summary — {stats}, loss {100.0 * _lost / _count:0.#}% ({_count} samples)");
+            _log.Info($"{target}: hourly summary: {stats}, loss {100.0 * _lost / _count:0.#}% ({_count} samples)");
         }
         _hour = hour;
         _count = 0;

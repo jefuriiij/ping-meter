@@ -342,7 +342,7 @@ internal sealed class TrayContext : ApplicationContext
         string status = paused ? "paused"
             : snapshot.Current is { } c ? (c.IsLost ? "timeout" : $"{c.RoundtripMs} ms")
             : "…";
-        string text = $"PingMeter — {target}: {status}";
+        string text = $"PingMeter\n{target}: {status}";
         _tray.Text = text.Length <= 120 ? text : text[..120];
 
         SetTrayIcon(BucketFor(snapshot, paused));
@@ -410,7 +410,7 @@ internal sealed class TrayContext : ApplicationContext
 
     private void OnRepairStarted()
     {
-        _eventLog.Info("network repair started — pinging paused");
+        _eventLog.Info("network repair started, pinging paused");
         _engine.SetPaused(true);
         RebuildMenu();
     }

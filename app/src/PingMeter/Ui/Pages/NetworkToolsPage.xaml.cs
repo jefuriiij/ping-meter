@@ -23,9 +23,9 @@ public partial class NetworkToolsPage : System.Windows.Controls.UserControl
     private static readonly PresetItem[] BuiltInPresets =
     [
         new("Automatic (from your router)", null, null, false, false),
-        new("Cloudflare (1.1.1.1) — fast, private", "1.1.1.1", "1.0.0.1", false, false),
+        new("Cloudflare (1.1.1.1), fast and private", "1.1.1.1", "1.0.0.1", false, false),
         new("Google (8.8.8.8)", "8.8.8.8", "8.8.4.4", false, false),
-        new("Quad9 (9.9.9.9) — blocks malware sites", "9.9.9.9", "149.112.112.112", false, false),
+        new("Quad9 (9.9.9.9), blocks malware sites", "9.9.9.9", "149.112.112.112", false, false),
     ];
 
     private readonly List<PresetItem> _presets = [];
@@ -111,18 +111,28 @@ public partial class NetworkToolsPage : System.Windows.Controls.UserControl
     private async void OnQuickFix(object sender, RoutedEventArgs e)
     {
         SetBusy(true, "Working…", indeterminate: true);
-        Log("Quick fix — clearing DNS cache…");
+        Log("Quick fix: clearing DNS cache…");
         RepairStarted?.Invoke();
 
         var result = await NetworkRepair.RunQuickFixAsync();
         bool ok = result.Outcome == RepairOutcome.Success;
+        bool cancelled = result.Outcome == RepairOutcome.Cancelled;
+        string error = result.Error
+            ?? (result.Steps.FirstOrDefault(s => !s.Ok) is { } failed
+                ? $"ipconfig /flushdns exited with code {failed.ExitCode}"
+                : "unknown error");
 
-        Log(ok ? "✓ DNS cache cleared" : $"✗ Failed: {result.Error}");
-        RepairCompleted?.Invoke(ok ? "quick fix: DNS cache cleared" : $"quick fix failed: {result.Error}", false);
+        Log(ok ? "✓ DNS cache cleared" : cancelled ? "Cancelled. Windows permission was not granted." : $"✗ Failed: {error}");
+        RepairCompleted?.Invoke(
+            ok ? "quick fix: DNS cache cleared" : cancelled ? "quick fix cancelled (no admin permission)" : $"quick fix failed: {error}",
+            false);
         SetBusy(false, "");
-        ShowInfo(ok ? InfoBarSeverity.Success : InfoBarSeverity.Error,
-            ok ? "DNS cache cleared" : "Quick fix failed",
-            ok ? "If pages were failing to load, try again now." : result.Error ?? "");
+        if (cancelled)
+            ShowInfo(InfoBarSeverity.Informational, "Quick fix cancelled", "Windows permission was not granted, so nothing changed.");
+        else
+            ShowInfo(ok ? InfoBarSeverity.Success : InfoBarSeverity.Error,
+                ok ? "DNS cache cleared" : "Quick fix failed",
+                ok ? "If pages were failing to load, try again now." : error);
     }
 
     private async void OnFullReset(object sender, RoutedEventArgs e)
@@ -139,7 +149,7 @@ public partial class NetworkToolsPage : System.Windows.Controls.UserControl
         if (await confirm.ShowDialogAsync() != Wpf.Ui.Controls.MessageBoxResult.Primary)
             return;
 
-        SetBusy(true, "Working — answer the Windows permission prompt…", indeterminate: true);
+        SetBusy(true, "Waiting for you to answer the Windows permission prompt…", indeterminate: true);
         Log("Full reset started");
         Log("Waiting for Windows permission (UAC)…");
         RepairStarted?.Invoke();
@@ -151,7 +161,7 @@ public partial class NetworkToolsPage : System.Windows.Controls.UserControl
             if (p.LastResult is { } step)
                 Log(StepLine(step));
             StatusText.Text = p.CurrentStep is { } next
-                ? $"Step {Math.Min(p.Completed + 1, p.Total)} of {p.Total} — {next}…"
+                ? $"Step {Math.Min(p.Completed + 1, p.Total)} of {p.Total}: {next}…"
                 : "Finishing…";
         });
         var result = await NetworkRepair.RunFullResetAsync(progress);
@@ -171,7 +181,7 @@ public partial class NetworkToolsPage : System.Windows.Controls.UserControl
         switch (result.Outcome)
         {
             case RepairOutcome.Cancelled:
-                ShowInfo(InfoBarSeverity.Informational, "Reset cancelled", "Windows permission was not granted — nothing was changed.");
+                ShowInfo(InfoBarSeverity.Informational, "Reset cancelled", "Windows permission was not granted, so nothing changed.");
                 break;
             case RepairOutcome.Failed:
                 ShowInfo(InfoBarSeverity.Error, "Reset failed", result.Error ?? "");
@@ -244,7 +254,7 @@ public partial class NetworkToolsPage : System.Windows.Controls.UserControl
             try
             {
                 Process.Start(new ProcessStartInfo("shutdown.exe", "/a") { UseShellExecute = false, CreateNoWindow = true });
-                Log("Restart cancelled — remember to restart later to finish the reset");
+                Log("Restart cancelled. Restart later to finish the reset.");
             }
             catch
             {
@@ -263,7 +273,7 @@ public partial class NetworkToolsPage : System.Windows.Controls.UserControl
     {
         var status = DnsInfo.GetActive();
         DnsCurrent.Text = status is null
-            ? "Current: unknown — no active network found"
+            ? "Current: unknown (no active network found)"
             : $"Current: {(status.Servers.Count > 0 ? string.Join(", ", status.Servers) : "none")} "
               + $"({(status.IsManual ? "manual" : "automatic")}) on {status.AdapterName}";
     }
@@ -332,7 +342,7 @@ public partial class NetworkToolsPage : System.Windows.Controls.UserControl
         var status = DnsInfo.GetActive();
         if (status is null)
         {
-            ShowInfo(InfoBarSeverity.Warning, "No active network", "Couldn't find an active network adapter — are you connected?");
+            ShowInfo(InfoBarSeverity.Warning, "No active network", "Couldn't find an active network adapter. Are you connected?");
             return;
         }
 
@@ -347,7 +357,7 @@ public partial class NetworkToolsPage : System.Windows.Controls.UserControl
             if (!IsIPv4(primary) || (secondary != null && !IsIPv4(secondary)))
             {
                 ShowInfo(InfoBarSeverity.Error, "That doesn't look like an IPv4 address",
-                    "A DNS address looks like 1.1.1.1 — four numbers (0–255) separated by dots.");
+                    "A DNS address looks like 1.1.1.1: four numbers from 0 to 255, separated by dots.");
                 return;
             }
         }
@@ -357,7 +367,7 @@ public partial class NetworkToolsPage : System.Windows.Controls.UserControl
         if (!automatic && !ValidateTemplates(primaryDoh, PrimaryDohTemplate.Text, secondaryDoh, secondary is null ? null : SecondaryDohTemplate.Text))
             return;
 
-        SetBusy(true, "Working — answer the Windows permission prompt…", indeterminate: true);
+        SetBusy(true, "Waiting for you to answer the Windows permission prompt…", indeterminate: true);
         Log(automatic
             ? $"Switching DNS to automatic on {status.AdapterName}…"
             : $"Setting DNS to {primary}{(secondary != null ? $" / {secondary}" : "")} on {status.AdapterName}…");
@@ -404,7 +414,7 @@ public partial class NetworkToolsPage : System.Windows.Controls.UserControl
         if (!IsIPv4(primary) || (secondary != null && !IsIPv4(secondary)))
         {
             ShowInfo(InfoBarSeverity.Warning, "Nothing to save yet",
-                "Enter a Main address (and optionally a Backup) first — a DNS address looks like 1.1.1.1.");
+                "Enter a Main address first (a Backup is optional). A DNS address looks like 1.1.1.1.");
             return;
         }
 
@@ -434,7 +444,7 @@ public partial class NetworkToolsPage : System.Windows.Controls.UserControl
         var confirm = new Wpf.Ui.Controls.MessageBox
         {
             Title = $"Delete \"{name}\"?",
-            Content = "This only removes it from the list — your current DNS settings don't change.",
+            Content = "This only removes it from the list. Your current DNS settings don't change.",
             PrimaryButtonText = "Delete",
             CloseButtonText = "Cancel",
         };
@@ -484,6 +494,7 @@ public partial class NetworkToolsPage : System.Windows.Controls.UserControl
         SavePresetButton.IsEnabled = !busy && Selected.IsCustom;
         DeletePresetButton.IsEnabled = !busy && Selected.IsSaved;
         StatusText.Text = status;
+        StatusText.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
         Progress.IsIndeterminate = indeterminate;
         Progress.Value = 0;
         Progress.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
@@ -495,10 +506,13 @@ public partial class NetworkToolsPage : System.Windows.Controls.UserControl
         Info.Title = title;
         Info.Message = message;
         Info.IsOpen = true;
+        // The bar sits at the top; Apply DNS is far below it, so scroll the result into view.
+        Info.BringIntoView();
     }
 
     private void Log(string line)
     {
+        ActivitySection.Visibility = Visibility.Visible;
         ActivityLog.AppendText($"{DateTime.Now:HH:mm:ss}  {line}{Environment.NewLine}");
         ActivityLog.ScrollToEnd();
     }

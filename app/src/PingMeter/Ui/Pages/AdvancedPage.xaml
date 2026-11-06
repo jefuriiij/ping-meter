@@ -26,11 +26,11 @@
             <ui:CardControl Margin="0,0,0,8" Icon="{ui:SymbolIcon Clock24}">
                 <ui:CardControl.Header>
                     <StackPanel>
-                        <TextBlock FontWeight="SemiBold" Text="Give up after" />
+                        <TextBlock FontWeight="SemiBold" TextWrapping="Wrap" Text="Give up after" />
                         <TextBlock
                             TextWrapping="Wrap"
                             Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                            Text="No reply within this time counts as a lost ping — shown as red T/O." />
+                            Text="No reply within this time counts as a lost ping. It shows as a red T/O." />
                     </StackPanel>
                 </ui:CardControl.Header>
                 <StackPanel Orientation="Horizontal">
@@ -53,7 +53,7 @@
             <ui:CardControl Margin="0,0,0,8" Icon="{ui:SymbolIcon DataTrending24}">
                 <ui:CardControl.Header>
                     <StackPanel>
-                        <TextBlock FontWeight="SemiBold" Text="Statistics period" />
+                        <TextBlock FontWeight="SemiBold" TextWrapping="Wrap" Text="Statistics period" />
                         <TextBlock
                             TextWrapping="Wrap"
                             Foreground="{DynamicResource TextFillColorSecondaryBrush}"
@@ -85,7 +85,7 @@
             <ui:CardControl Margin="0,0,0,8" Icon="{ui:SymbolIcon Desktop24}">
                 <ui:CardControl.Header>
                     <StackPanel>
-                        <TextBlock FontWeight="SemiBold" Text="Where to show" />
+                        <TextBlock FontWeight="SemiBold" TextWrapping="Wrap" Text="Where to show" />
                         <TextBlock
                             TextWrapping="Wrap"
                             Foreground="{DynamicResource TextFillColorSecondaryBrush}"
@@ -102,7 +102,7 @@
             <ui:CardControl Margin="0,0,0,8" Icon="{ui:SymbolIcon ArrowLeft24}">
                 <ui:CardControl.Header>
                     <StackPanel>
-                        <TextBlock FontWeight="SemiBold" Text="Move left" />
+                        <TextBlock FontWeight="SemiBold" TextWrapping="Wrap" Text="Move left" />
                         <TextBlock
                             TextWrapping="Wrap"
                             Foreground="{DynamicResource TextFillColorSecondaryBrush}"
@@ -129,7 +129,7 @@
             <ui:CardControl Margin="0,0,0,8" Icon="{ui:SymbolIcon Eye24}">
                 <ui:CardControl.Header>
                     <StackPanel>
-                        <TextBlock FontWeight="SemiBold" Text="See-through background" />
+                        <TextBlock FontWeight="SemiBold" TextWrapping="Wrap" Text="See-through background" />
                         <TextBlock
                             TextWrapping="Wrap"
                             Foreground="{DynamicResource TextFillColorSecondaryBrush}"
@@ -147,7 +147,7 @@
             <ui:CardControl Margin="0,0,0,8" Icon="{ui:SymbolIcon ArrowDownload24}">
                 <ui:CardControl.Header>
                     <StackPanel>
-                        <TextBlock FontWeight="SemiBold" Text="Tell me when a new version is available" />
+                        <TextBlock FontWeight="SemiBold" TextWrapping="Wrap" Text="Tell me when a new version is available" />
                         <TextBlock
                             TextWrapping="Wrap"
                             Foreground="{DynamicResource TextFillColorSecondaryBrush}"
@@ -160,11 +160,11 @@
             <ui:CardControl Margin="0,0,0,8" Icon="{ui:SymbolIcon Notebook24}">
                 <ui:CardControl.Header>
                     <StackPanel>
-                        <TextBlock FontWeight="SemiBold" Text="Keep a diary of connection problems" />
+                        <TextBlock FontWeight="SemiBold" TextWrapping="Wrap" Text="Keep a diary of connection problems" />
                         <TextBlock
                             TextWrapping="Wrap"
                             Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                            Text="Timeouts, slow spells and hourly summaries — open via 'View connection log'." />
+                            Text="Timeouts, slow spells and hourly summaries. Open it with 'View connection log'." />
                     </StackPanel>
                 </ui:CardControl.Header>
                 <ui:ToggleSwitch IsChecked="{Binding EventLogEnabled, Mode=TwoWay}" />
@@ -173,11 +173,11 @@
             <ui:CardControl Margin="0,0,0,8" Icon="{ui:SymbolIcon DocumentTable24}">
                 <ui:CardControl.Header>
                     <StackPanel>
-                        <TextBlock FontWeight="SemiBold" Text="Also record every single ping (CSV file)" />
+                        <TextBlock FontWeight="SemiBold" TextWrapping="Wrap" Text="Also record every single ping (CSV file)" />
                         <TextBlock
                             TextWrapping="Wrap"
                             Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                            Text="Spreadsheet-style data for graphing — about 3.5 MB per day." />
+                            Text="Spreadsheet-style data for graphing, about 3.5 MB per day." />
                     </StackPanel>
                 </ui:CardControl.Header>
                 <ui:ToggleSwitch IsChecked="{Binding SampleCsvEnabled, Mode=TwoWay}" />
@@ -186,7 +186,7 @@
             <ui:CardControl Icon="{ui:SymbolIcon Delete24}">
                 <ui:CardControl.Header>
                     <StackPanel>
-                        <TextBlock FontWeight="SemiBold" Text="Delete logs older than" />
+                        <TextBlock FontWeight="SemiBold" TextWrapping="Wrap" Text="Delete logs older than" />
                         <TextBlock
                             TextWrapping="Wrap"
                             Foreground="{DynamicResource TextFillColorSecondaryBrush}"

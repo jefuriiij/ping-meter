@@ -14,7 +14,7 @@
                 FontWeight="SemiBold"
                 Text="Network tools" />
             <TextBlock
-                Margin="0,0,0,16"
+                Margin="0,0,0,20"
                 Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                 Text="Fix the connection and choose which DNS server you use. Windows asks for permission before anything changes."
                 TextWrapping="Wrap" />
@@ -57,66 +57,78 @@
             <ui:CardControl Margin="0,0,0,8" Icon="{ui:SymbolIcon Flash24}">
                 <ui:CardControl.Header>
                     <StackPanel>
-                        <TextBlock FontWeight="SemiBold" Text="Quick fix — clear DNS cache" />
+                        <TextBlock FontWeight="SemiBold" TextWrapping="Wrap" Text="Quick fix" />
                         <TextBlock
                             Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                            Text="Fixes most &quot;website not found&quot; problems. Instant and safe — no admin prompt, no restart."
+                            Text="Clears the DNS cache. Fixes most &quot;website not found&quot; problems, with no restart. Some Windows versions ask for permission first."
                             TextWrapping="Wrap" />
                     </StackPanel>
                 </ui:CardControl.Header>
                 <ui:Button
                     x:Name="QuickFixButton"
+                    MinWidth="80"
                     Click="OnQuickFix"
                     Content="Run" />
             </ui:CardControl>
 
-            <ui:CardControl Margin="0,0,0,8" Icon="{ui:SymbolIcon ArrowSync24}">
+            <ui:CardControl Icon="{ui:SymbolIcon ArrowSync24}">
                 <ui:CardControl.Header>
                     <StackPanel>
-                        <TextBlock FontWeight="SemiBold" Text="Full reset — rebuild the connection" />
+                        <TextBlock FontWeight="SemiBold" TextWrapping="Wrap" Text="Full reset" />
                         <TextBlock
                             Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                            Text="The full 5-step repair: clear DNS, new IP address, reset Winsock and TCP/IP. A restart is needed afterwards."
+                            Text="Rebuilds the connection in 5 steps: clear DNS, new IP address, reset Winsock and TCP/IP. Needs a restart to finish."
                             TextWrapping="Wrap" />
                     </StackPanel>
                 </ui:CardControl.Header>
                 <ui:Button
                     x:Name="FullResetButton"
+                    MinWidth="80"
                     Click="OnFullReset"
                     Content="Reset" />
             </ui:CardControl>
 
+            <!--  Shown only while a repair or DNS change runs  -->
             <ProgressBar
                 x:Name="Progress"
                 Height="4"
-                Margin="0,8,0,4"
+                Margin="0,12,0,0"
                 Visibility="Collapsed" />
             <TextBlock
                 x:Name="StatusText"
-                Margin="0,0,0,4"
-                Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                Margin="0,6,0,0"
+                Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                Visibility="Collapsed" />
 
             <TextBlock
-                Margin="0,20,0,8"
+                Margin="0,20,0,4"
                 FontWeight="SemiBold"
                 Text="DNS server" />
+            <TextBlock
+                Margin="0,0,0,8"
+                Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                Text="DNS is the phone book that turns website names into addresses. Save a combination to reuse it later. Switch back to Automatic to undo everything."
+                TextWrapping="Wrap" />
 
-            <ui:Card Margin="0,0,0,8" Padding="16">
+            <ui:Card Padding="16">
                 <StackPanel>
                     <TextBlock
                         x:Name="DnsCurrent"
-                        Margin="0,0,0,12"
-                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                        Margin="0,0,0,16"
                         TextWrapping="Wrap" />
 
+                    <TextBlock
+                        Margin="0,0,0,4"
+                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                        Text="Provider" />
                     <ComboBox
                         x:Name="PresetBox"
                         Margin="0,0,0,12"
                         HorizontalAlignment="Stretch"
                         SelectionChanged="OnPresetChanged" />
 
-                    <!--  Columns match the DNS over HTTPS grid below, so the two rows line up  -->
-                    <Grid Margin="0,0,0,12">
+                    <!--  One column per server: its address, then its encryption under it  -->
+                    <Grid Margin="0,0,0,16">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="16" />
@@ -131,29 +143,8 @@
                                 x:Name="DnsPrimary"
                                 HorizontalAlignment="Stretch"
                                 PlaceholderText="1.1.1.1" />
-                        </StackPanel>
-                        <StackPanel Grid.Column="2">
                             <TextBlock
-                                Margin="0,0,0,4"
-                                Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                                Text="Backup" />
-                            <ui:TextBox
-                                x:Name="DnsSecondary"
-                                HorizontalAlignment="Stretch"
-                                PlaceholderText="optional" />
-                        </StackPanel>
-                    </Grid>
-
-                    <!--  DNS over HTTPS, per server, mirroring the Windows 11 settings page  -->
-                    <Grid Margin="0,0,0,12">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="16" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <StackPanel Grid.Column="0">
-                            <TextBlock
-                                Margin="0,0,0,4"
+                                Margin="0,12,0,4"
                                 Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                                 Text="DNS over HTTPS" />
                             <ComboBox
@@ -170,6 +161,14 @@
                             <TextBlock
                                 Margin="0,0,0,4"
                                 Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                Text="Backup" />
+                            <ui:TextBox
+                                x:Name="DnsSecondary"
+                                HorizontalAlignment="Stretch"
+                                PlaceholderText="optional" />
+                            <TextBlock
+                                Margin="0,12,0,4"
+                                Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                                 Text="DNS over HTTPS" />
                             <ComboBox
                                 x:Name="SecondaryDoh"
@@ -183,43 +182,44 @@
                         </StackPanel>
                     </Grid>
 
-                    <StackPanel Orientation="Horizontal">
+                    <!--  Preset housekeeping on the left, the action that changes Windows on the right  -->
+                    <DockPanel LastChildFill="False">
                         <ui:Button
                             x:Name="ApplyDnsButton"
-                            Margin="0,0,8,0"
+                            MinWidth="96"
                             Appearance="Primary"
                             Click="OnApplyDns"
-                            Content="Apply DNS" />
+                            Content="Apply DNS"
+                            DockPanel.Dock="Right" />
                         <ui:Button
                             x:Name="SavePresetButton"
                             Margin="0,0,8,0"
                             Click="OnSavePreset"
-                            Content="Save as preset…" />
+                            Content="Save as preset…"
+                            DockPanel.Dock="Left" />
                         <ui:Button
                             x:Name="DeletePresetButton"
                             Click="OnDeletePreset"
-                            Content="Delete preset" />
-                    </StackPanel>
-
-                    <TextBlock
-                        Margin="0,12,0,0"
-                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                        Text="DNS is the phone book that turns website names into addresses. Save a combination to reuse it later; switching back to Automatic undoes everything."
-                        TextWrapping="Wrap" />
+                            Content="Delete preset"
+                            DockPanel.Dock="Left" />
+                    </DockPanel>
                 </StackPanel>
             </ui:Card>
 
-            <TextBlock
-                Margin="0,20,0,8"
-                FontWeight="SemiBold"
-                Text="Activity" />
-            <ui:TextBox
-                x:Name="ActivityLog"
-                Height="150"
-                AcceptsReturn="True"
-                IsReadOnly="True"
-                TextWrapping="NoWrap"
-                VerticalScrollBarVisibility="Auto" />
+            <!--  Appears with the first entry, so an unused page has no empty box  -->
+            <StackPanel x:Name="ActivitySection" Visibility="Collapsed">
+                <TextBlock
+                    Margin="0,20,0,8"
+                    FontWeight="SemiBold"
+                    Text="Activity" />
+                <ui:TextBox
+                    x:Name="ActivityLog"
+                    Height="120"
+                    AcceptsReturn="True"
+                    IsReadOnly="True"
+                    TextWrapping="NoWrap"
+                    VerticalScrollBarVisibility="Auto" />
+            </StackPanel>
 
         </StackPanel>
     </ScrollViewer>

@@ -261,11 +261,11 @@ internal sealed class WidgetForm : Form
         string text;
         if (paused)
         {
-            text = $"{target} — paused";
+            text = $"{target}: paused";
         }
         else if (snapshot.SampleCount == 0)
         {
-            text = $"{target} — waiting for first reply…";
+            text = $"{target}: waiting for first reply…";
         }
         else
         {
