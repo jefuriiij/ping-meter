@@ -23,6 +23,13 @@ public sealed class DnsPreset
     public string? PrimaryDohTemplate { get; set; }
     public string? SecondaryDoh { get; set; }
     public string? SecondaryDohTemplate { get; set; }
+
+    // IPv6 servers, set only when the preset was saved with "Also set IPv6 DNS" on. They use
+    // the same encryption choice as the IPv4 server in their column.
+    public string? Ipv6Primary { get; set; }
+    public string? Ipv6Secondary { get; set; }
+
+    public DnsPreset Clone() => (DnsPreset)MemberwiseClone();
 }
 
 public sealed class AppConfig
@@ -80,15 +87,21 @@ public sealed class AppConfig
 
         DnsPresets = DnsPresets
             .Where(p => !string.IsNullOrWhiteSpace(p.Name) && IsIPv4(p.Primary))
-            .Select(p => new DnsPreset
+            .Select(p =>
             {
-                Name = p.Name.Trim(),
-                Primary = p.Primary.Trim(),
-                Secondary = IsIPv4(p.Secondary) ? p.Secondary!.Trim() : null,
-                PrimaryDoh = p.PrimaryDoh,
-                PrimaryDohTemplate = p.PrimaryDohTemplate,
-                SecondaryDoh = p.SecondaryDoh,
-                SecondaryDohTemplate = p.SecondaryDohTemplate,
+                string? v6Primary = IsIPv6(p.Ipv6Primary) ? p.Ipv6Primary!.Trim() : null;
+                return new DnsPreset
+                {
+                    Name = p.Name.Trim(),
+                    Primary = p.Primary.Trim(),
+                    Secondary = IsIPv4(p.Secondary) ? p.Secondary!.Trim() : null,
+                    PrimaryDoh = p.PrimaryDoh,
+                    PrimaryDohTemplate = p.PrimaryDohTemplate,
+                    SecondaryDoh = p.SecondaryDoh,
+                    SecondaryDohTemplate = p.SecondaryDohTemplate,
+                    Ipv6Primary = v6Primary,
+                    Ipv6Secondary = v6Primary != null && IsIPv6(p.Ipv6Secondary) ? p.Ipv6Secondary!.Trim() : null,
+                };
             })
             .GroupBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
             .Select(g => g.First())
@@ -101,6 +114,12 @@ public sealed class AppConfig
         IPAddress.TryParse(value.Trim(), out var ip) &&
         ip.AddressFamily == AddressFamily.InterNetwork;
 
+    private static bool IsIPv6(string? value) =>
+        value != null &&
+        !value.Contains('%') &&
+        IPAddress.TryParse(value.Trim(), out var ip) &&
+        ip.AddressFamily == AddressFamily.InterNetworkV6;
+
     public AppConfig Clone()
     {
         var copy = (AppConfig)MemberwiseClone();
@@ -110,16 +129,7 @@ public sealed class AppConfig
     }
 
     private static List<DnsPreset> ClonePresets(IEnumerable<DnsPreset> presets) =>
-        presets.Select(p => new DnsPreset
-        {
-            Name = p.Name,
-            Primary = p.Primary,
-            Secondary = p.Secondary,
-            PrimaryDoh = p.PrimaryDoh,
-            PrimaryDohTemplate = p.PrimaryDohTemplate,
-            SecondaryDoh = p.SecondaryDoh,
-            SecondaryDohTemplate = p.SecondaryDohTemplate,
-        }).ToList();
+        presets.Select(p => p.Clone()).ToList();
 
     public void CopyFrom(AppConfig other)
     {

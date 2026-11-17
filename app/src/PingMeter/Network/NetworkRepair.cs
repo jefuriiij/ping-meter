@@ -37,12 +37,18 @@ internal sealed record DnsServerRequest(string Address, DohMode? Doh, string? Te
 /// The whole DNS change, handed to the elevated helper as base64 JSON — a single argument,
 /// so no quoting or ordering games on the command line.
 /// </summary>
+/// <param name="Ipv6InterfaceIndex">The adapter's IPv6 index; null when IPv6 is off for it, and then IPv6 DNS is left alone.</param>
+/// <param name="SetIpv6">With static IPv4 servers: true sets the IPv6 servers below, false hands IPv6 DNS back to automatic.</param>
 internal sealed record DnsRequest(
     int InterfaceIndex,
     string AdapterId,
     bool Automatic,
     DnsServerRequest? Primary,
-    DnsServerRequest? Secondary);
+    DnsServerRequest? Secondary,
+    int? Ipv6InterfaceIndex = null,
+    bool SetIpv6 = false,
+    DnsServerRequest? Ipv6Primary = null,
+    DnsServerRequest? Ipv6Secondary = null);
 
 /// <summary>
 /// One-click internet repair (the classic flushdns/release/renew/winsock/tcpip sequence).
@@ -223,52 +229,79 @@ internal static class NetworkRepair
             return;
         }
 
-        int index = request.InterfaceIndex;
+        int? v6Index = request.Ipv6InterfaceIndex is > 0 ? request.Ipv6InterfaceIndex : null;
         if (request.Automatic)
         {
-            // Back to DHCP: drop any encryption settings we may have written before.
-            foreach (string server in ReadConfiguredDohServers(request.AdapterId))
-                results.Add(SetDohRegistry(request.AdapterId, server, DohMode.Off, null));
-            results.Add(RunStep("Switch DNS to automatic", "netsh.exe",
-                $"interface ipv4 set dnsservers name={index} dhcp"));
+            SetFamilyAutomatic(results, request.AdapterId, request.InterfaceIndex, ipv6: false);
+            if (v6Index is { } i6)
+                SetFamilyAutomatic(results, request.AdapterId, i6, ipv6: true);
         }
         else
         {
-            var servers = new[] { request.Primary, request.Secondary }
-                .Where(s => s is not null && IsIPv4(s.Address))
-                .Select(s => s!)
-                .ToList();
-            if (servers.Count == 0)
+            var servers = ValidServers(request.Primary, request.Secondary, ipv6: false);
+            var v6Servers = request.SetIpv6 ? ValidServers(request.Ipv6Primary, request.Ipv6Secondary, ipv6: true) : [];
+            if (servers.Count == 0 || (request.SetIpv6 && v6Index != null && v6Servers.Count == 0))
             {
                 WriteResults([new RepairStepResult("Invalid arguments", -4, false, false)]);
                 return;
             }
 
-            // Encryption first, then the servers — applying the addresses last makes the
-            // DNS client pick the new DoH settings up straight away.
-            foreach (var server in servers)
+            SetFamilyStatic(results, request.AdapterId, request.InterfaceIndex, servers, ipv6: false);
+            if (v6Index is { } i6)
             {
-                if (server.Doh is not { } doh)
-                    continue; // caller didn't ask about encryption — leave it untouched
-                if (doh == DohMode.Manual && IsDohTemplate(server.Template))
-                {
-                    results.Add(RunStep($"Register DoH template for {server.Address}", "netsh.exe",
-                        $"dns add encryption server={server.Address} dohtemplate={server.Template} autoupgrade=yes udpfallback=no"));
-                }
-                results.Add(SetDohRegistry(request.AdapterId, server.Address, doh, server.Template));
-            }
-
-            results.Add(RunStep($"Set DNS to {servers[0].Address}", "netsh.exe",
-                $"interface ipv4 set dnsservers name={index} static {servers[0].Address} primary validate=no"));
-            if (servers.Count > 1)
-            {
-                results.Add(RunStep($"Add backup DNS {servers[1].Address}", "netsh.exe",
-                    $"interface ipv4 add dnsservers name={index} {servers[1].Address} index=2 validate=no"));
+                if (request.SetIpv6)
+                    SetFamilyStatic(results, request.AdapterId, i6, v6Servers, ipv6: true);
+                else
+                    SetFamilyAutomatic(results, request.AdapterId, i6, ipv6: true);
             }
         }
 
         results.Add(RunStep("Clear DNS cache", "ipconfig.exe", "/flushdns"));
         WriteResults(results);
+    }
+
+    /// <summary>Main then backup, keeping only real addresses of the family, in Windows' own text form.</summary>
+    private static List<DnsServerRequest> ValidServers(DnsServerRequest? primary, DnsServerRequest? secondary, bool ipv6) =>
+        new[] { primary, secondary }
+            .Where(s => s is not null && (ipv6 ? IsIPv6(s.Address) : IsIPv4(s.Address)))
+            .Select(s => s! with { Address = IPAddress.Parse(s!.Address).ToString() })
+            .ToList();
+
+    /// <summary>Back to DHCP for one address family, dropping any encryption settings we may have written before.</summary>
+    private static void SetFamilyAutomatic(List<RepairStepResult> results, string adapterId, int index, bool ipv6)
+    {
+        foreach (string server in ReadConfiguredDohServers(adapterId, ipv6))
+            results.Add(SetDohRegistry(adapterId, server, DohMode.Off, null));
+        results.Add(ipv6
+            ? RunStep("Switch IPv6 DNS to automatic", "netsh.exe", $"interface ipv6 set dnsservers name={index} source=dhcp")
+            : RunStep("Switch DNS to automatic", "netsh.exe", $"interface ipv4 set dnsservers name={index} dhcp"));
+    }
+
+    private static void SetFamilyStatic(List<RepairStepResult> results, string adapterId, int index, List<DnsServerRequest> servers, bool ipv6)
+    {
+        // Encryption first, then the servers. Applying the addresses last makes the
+        // DNS client pick the new DoH settings up straight away.
+        foreach (var server in servers)
+        {
+            if (server.Doh is not { } doh)
+                continue; // caller didn't ask about encryption, so leave it untouched
+            if (doh == DohMode.Manual && IsDohTemplate(server.Template))
+            {
+                results.Add(RunStep($"Register DoH template for {server.Address}", "netsh.exe",
+                    $"dns add encryption server={server.Address} dohtemplate={server.Template} autoupgrade=yes udpfallback=no"));
+            }
+            results.Add(SetDohRegistry(adapterId, server.Address, doh, server.Template));
+        }
+
+        string family = ipv6 ? "ipv6" : "ipv4";
+        string label = ipv6 ? "IPv6 DNS" : "DNS";
+        results.Add(RunStep($"Set {label} to {servers[0].Address}", "netsh.exe",
+            $"interface {family} set dnsservers name={index} static {servers[0].Address} primary validate=no"));
+        if (servers.Count > 1)
+        {
+            results.Add(RunStep($"Add backup {label} {servers[1].Address}", "netsh.exe",
+                $"interface {family} add dnsservers name={index} {servers[1].Address} index=2 validate=no"));
+        }
     }
 
     /// <summary>Write (or clear) one server's DoH setting. Needs the elevation we already have.</summary>
@@ -306,13 +339,12 @@ internal static class NetworkRepair
         }
     }
 
-    /// <summary>Servers that currently have an encryption setting on this adapter.</summary>
-    private static List<string> ReadConfiguredDohServers(string adapterId)
+    /// <summary>Servers of one address family that currently have an encryption setting on this adapter.</summary>
+    private static List<string> ReadConfiguredDohServers(string adapterId, bool ipv6)
     {
         try
         {
-            using var key = Registry.LocalMachine.OpenSubKey(
-                $@"SYSTEM\CurrentControlSet\Services\Dnscache\InterfaceSpecificParameters\{adapterId}\DohInterfaceSettings\Doh");
+            using var key = Registry.LocalMachine.OpenSubKey(DnsInfo.DohFamilyKeyPath(adapterId, ipv6));
             return key?.GetSubKeyNames().ToList() ?? [];
         }
         catch
@@ -334,6 +366,10 @@ internal static class NetworkRepair
 
     private static bool IsIPv4(string value) =>
         IPAddress.TryParse(value, out var ip) && ip.AddressFamily == AddressFamily.InterNetwork;
+
+    /// <summary>No zone ids ("%12"): they mean nothing for a DNS server and only widen the command line.</summary>
+    private static bool IsIPv6(string value) =>
+        !value.Contains('%') && IPAddress.TryParse(value, out var ip) && ip.AddressFamily == AddressFamily.InterNetworkV6;
 
     private static RepairStepResult RunStep(string name, string fileName, string arguments)
     {

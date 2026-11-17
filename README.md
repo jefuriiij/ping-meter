@@ -2,7 +2,7 @@
 
 A tiny Windows 11 utility that embeds a live ping readout **inside the taskbar** itself — not a tray icon: color-coded latency, a sparkline of recent pings, packet loss, and hover stats — a permanent replacement for keeping `ping google.com -t` open in a terminal.
 
-It also carries a small set of network tools for when the connection actually breaks: a DNS-cache flush, the full internet-repair sequence, and IPv4 DNS switching.
+It also carries a small set of network tools for when the connection actually breaks: a DNS-cache flush, the full internet-repair sequence, and DNS switching for IPv4 and, optionally, IPv6.
 
 ## Install
 
@@ -40,7 +40,7 @@ Everything here is optional, started by you, and prompts for Windows permission 
 
 - **Quick fix**: clears the DNS cache (`ipconfig /flushdns`). Instant, and fixes most "website not found" problems. It runs without admin rights where Windows allows that; newer Windows builds need admin for it, so PingMeter asks for permission and retries.
 - **Full reset**: rebuilds the connection with the classic sequence (flush DNS → release IP → renew IP → reset Winsock → reset TCP/IP), with a live progress bar, a per-step ✓/✗ activity log, and a restart countdown you can cancel. Steps that only take effect after a reboot say so explicitly.
-- **DNS server**: shows the active adapter's current IPv4 DNS, and switches it between *Automatic (from your router)*, Cloudflare, Google, Quad9, or addresses you type. Switching back to Automatic undoes everything.
+- **DNS server**: shows the active adapter's current DNS, and switches it between *Automatic (from your router)*, Cloudflare, Google, Quad9, or addresses you type. Turn on **Also set IPv6 DNS** to set the provider's IPv6 servers too (for example Cloudflare's `2606:4700:4700::1111` and `2606:4700:4700::1001`); they share the encryption choice of the IPv4 server above them. When it is off, Windows picks IPv6 DNS automatically. Switching back to Automatic undoes everything.
 - **DNS over HTTPS**: per-server encryption, with the same three choices Windows 11 offers — *Off*, *On (automatic template)*, and *On (manual template)* for a URL you supply. Leave it alone and PingMeter won't touch your existing encryption settings.
 - **Save your own combinations**: name a DNS pair (with its encryption choices) and it joins the dropdown for one-click reuse later.
 

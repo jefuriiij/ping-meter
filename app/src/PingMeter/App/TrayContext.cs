@@ -387,7 +387,8 @@ internal sealed class TrayContext : ApplicationContext
             _settingsWindow.DnsPresetsChanged += presets =>
             {
                 // Persist immediately: a saved preset must survive closing with Cancel.
-                _config.DnsPresets = presets.Select(p => new DnsPreset { Name = p.Name, Primary = p.Primary, Secondary = p.Secondary }).ToList();
+                // Clone whole presets so their encryption and IPv6 choices are kept too.
+                _config.DnsPresets = presets.Select(p => p.Clone()).ToList();
                 ConfigStore.Save(_config);
             };
             _settingsWindow.Closed += (_, _) => _settingsWindow = null;
